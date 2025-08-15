@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.WebSocket", "WebSocket\SRF.Network.WebSocket.csproj", "{CC2797DC-0273-4DEB-B3BB-E23B38261A18}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Test", "Test\SRF.Network.Test.csproj", "{2ED9E2B9-95AB-41EA-9B0B-34EBDE01A546}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Cli", "Cli\SRF.Network.Cli.csproj", "{394F5F9A-570E-4B94-8F99-A653B4B6FCE5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CC2797DC-0273-4DEB-B3BB-E23B38261A18}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC2797DC-0273-4DEB-B3BB-E23B38261A18}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC2797DC-0273-4DEB-B3BB-E23B38261A18}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC2797DC-0273-4DEB-B3BB-E23B38261A18}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2ED9E2B9-95AB-41EA-9B0B-34EBDE01A546}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2ED9E2B9-95AB-41EA-9B0B-34EBDE01A546}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2ED9E2B9-95AB-41EA-9B0B-34EBDE01A546}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2ED9E2B9-95AB-41EA-9B0B-34EBDE01A546}.Release|Any CPU.Build.0 = Release|Any CPU
+		{394F5F9A-570E-4B94-8F99-A653B4B6FCE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{394F5F9A-570E-4B94-8F99-A653B4B6FCE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{394F5F9A-570E-4B94-8F99-A653B4B6FCE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{394F5F9A-570E-4B94-8F99-A653B4B6FCE5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
