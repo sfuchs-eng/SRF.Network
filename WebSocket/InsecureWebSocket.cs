@@ -5,7 +5,7 @@ using WS = System.Net.WebSockets;
 
 namespace SRF.Network.WebSocket;
 
-public class InsecureWebSocket : IWebSocket, IDisposable
+public class InsecureWebSocket : IWebSocketWrapper, IDisposable
 {
     private HttpClient? httpClient;
 
@@ -13,12 +13,17 @@ public class InsecureWebSocket : IWebSocket, IDisposable
 
     public TimeSpan KeepAliveInterval { get; set; } = TimeSpan.FromSeconds(30);
 
-    public WS.WebSocket? WebSocket { get; set; }
+    public WS.WebSocket? WebSocketInternal { get; set; }
+    public WS.WebSocket WebSocket => WebSocketInternal ?? throw new ArgumentNullException(nameof(WebSocketInternal), "No WebSocketInternal object to return. Have you connected?");
+
+    public SemaphoreSlim WebSocketReaderLock { get; } = new(1);
+
+    public SemaphoreSlim WebSocketWriterLock { get; } = new(1);
 
     public async Task DisconnectAsync(string reason, CancellationToken cancel)
     {
-        var sock = WebSocket;
-        WebSocket = null;
+        var sock = WebSocketInternal;
+        WebSocketInternal = null;
         if (sock == null)
             return;
         await sock.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, cancel);
@@ -49,7 +54,7 @@ public class InsecureWebSocket : IWebSocket, IDisposable
         }
 
         var stream = await resp.Content.ReadAsStreamAsync(cancel);
-        WebSocket = System.Net.WebSockets.WebSocket.CreateFromStream(
+        WebSocketInternal = System.Net.WebSockets.WebSocket.CreateFromStream(
             stream,
             isServer: false,
             subProtocol: null,
@@ -75,8 +80,8 @@ public class InsecureWebSocket : IWebSocket, IDisposable
         if (_disposed || !disposing)
             return;
         _disposed = true;
-        WebSocket?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
-        WebSocket?.Dispose();
+        WebSocketInternal?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
+        WebSocketInternal?.Dispose();
         httpClient?.CancelPendingRequests();
         httpClient?.Dispose();
     }
