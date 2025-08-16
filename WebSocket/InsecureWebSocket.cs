@@ -5,6 +5,9 @@ using WS = System.Net.WebSockets;
 
 namespace SRF.Network.WebSocket;
 
+/// <summary>
+/// Skips SSL/TLS certificate validation entirely.
+/// </summary>
 public class InsecureWebSocket : IWebSocketWrapper, IDisposable
 {
     private HttpClient? httpClient;
