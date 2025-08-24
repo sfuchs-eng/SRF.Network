@@ -3,7 +3,7 @@ using WS = System.Net.WebSockets;
 
 namespace SRF.Network.WebSocket;
 
-public interface IWebSocketWrapper
+public interface IWebSocketWrapper : IDisposable
 {
     /// <summary>
     /// A <see cref="WS.WebSocket"/> allows only 1 reader and 1 writer at a time.

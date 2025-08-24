@@ -150,6 +150,7 @@ public class JsonWebSocket : IWebSocketWrapper, IDisposable
     {
         if (_disposed)
             return;
-        
+        _disposed = true;
+        WebSocketWrapper.Dispose();
     }
 }
