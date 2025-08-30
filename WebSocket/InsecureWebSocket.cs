@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
+using Microsoft.Extensions.Logging;
 using WS = System.Net.WebSockets;
 
 namespace SRF.Network.WebSocket;
@@ -96,4 +97,8 @@ public class InsecureWebSocket : IWebSocketWrapper, IDisposable
             return true;
         }
     };
+
+    public InsecureWebSocket(ILogger logger)
+    {
+    }
 }

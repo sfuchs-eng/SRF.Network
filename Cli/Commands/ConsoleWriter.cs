@@ -24,7 +24,7 @@ public class ConsoleWriter : HostLauncher<ConsoleWriter.Worker>
             try
             {
                 logger.LogTrace("Creating {wsType} connection to {Url}", nameof(JsonWebSocket), parent.Url);
-                ws = new JsonWebSocket(new InsecureWebSocket(), wsLogger);
+                ws = new JsonWebSocket(new InsecureWebSocket(wsLogger), wsLogger);
                 ws.WebSocketClosed += (s, e) => logger.LogInformation("WebSocket closed");
                 await ws.ConnectAsync(new Uri(parent.Url), stoppingToken);
                 logger.LogInformation("Connected to {Url}", parent.Url);
