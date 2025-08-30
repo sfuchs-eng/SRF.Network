@@ -15,11 +15,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.8" />
-    <PackageReference Include="DotMake.CommandLine" Version="2.7.0" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <PackageReference Include="DotMake.CommandLine" Version="2.7.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\WebSocket\SRF.Network.WebSocket.csproj" />
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

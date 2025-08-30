@@ -19,4 +19,7 @@ public interface IWebSocketWrapper : IDisposable
     /// The wrapped WebSocket
     /// </summary>
     WS.WebSocket WebSocket { get; }
+
+    Task ConnectAsync(Uri endpoint, CancellationToken cancel);
+    Task DisconnectAsync(string reason, CancellationToken cancel);
 }

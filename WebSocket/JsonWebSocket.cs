@@ -42,10 +42,75 @@ public class JsonWebSocket : IWebSocketWrapper, IDisposable
 
     public JsonSerializerOptions JsonOptionsSend { get; set; } = new JsonSerializerOptions();
 
-    protected virtual async Task<TObject> DeserializeObject<TObject>(byte[] buffer, CancellationToken cancel) where TObject : class, new()
+    protected virtual async Task<TObject> DeserializeObject<TObject>(byte[] buffer, int rxCnt, CancellationToken cancel) where TObject : class, new()
     {
-        return await JsonSerializer.DeserializeAsync<TObject>(new MemoryStream(buffer), JsonOptionsReceive, cancel)
+        return await JsonSerializer.DeserializeAsync<TObject>(new MemoryStream(buffer, 0, rxCnt), JsonOptionsReceive, cancel)
             ?? new TObject();
+    }
+
+    protected record MessageReceptionResult(int ReceivedBytes, bool IsComplete, WebSocketMessageType MessageType);
+
+    protected virtual async Task<MessageReceptionResult> ReceiveMessageAsync(byte[] buf, CancellationToken cancel)
+    {
+        int rxCnt = 0;
+        WebSocketReceiveResult result;
+        do
+        {
+            await WebSocketReaderLock.WaitAsync(cancel);
+            try
+            {
+                result = await WebSocket.ReceiveAsync(new ArraySegment<byte>(buf, rxCnt, buf.Length - rxCnt), cancel);
+            }
+            finally
+            {
+                WebSocketReaderLock.Release();
+            }
+
+            // handle remote closures
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                await WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server side closure", cancel);
+                try
+                {
+                    WebSocketClosed?.Invoke(this, new EventArgs());
+                    throw new WebSocketException("Closed while receiving.");
+                }
+                catch (Exception exClosedEvent)
+                {
+                    logger.LogWarning(exClosedEvent, "WebSocketClosed event failed.");
+                }
+            }
+
+            if (result.MessageType == WebSocketMessageType.Binary)
+                logger.LogWarning("Received {wsMsgType}.{wsMsgTypeValue} instead of Text. Proceeding.", nameof(WebSocketMessageType), result.MessageType);
+
+            rxCnt += result.Count;
+            if (rxCnt >= buf.Length && !result.EndOfMessage)
+            {
+                // message too large for buffer
+                throw new JsonException($"Received message exceeds buffer size of {buf.Length} bytes.");
+            }
+        }
+        while (!result.EndOfMessage);
+
+        return new MessageReceptionResult(rxCnt, result.EndOfMessage, result.MessageType);
+    }
+
+    public async Task<string> ReceiveStringAsync(CancellationToken cancel)
+    {
+        var buf = ArrayPool<byte>.Shared.Rent(BufferSize);
+        string ret = string.Empty;
+        try
+        {
+            var rxm = await ReceiveMessageAsync(buf, cancel);
+            ret = System.Text.Encoding.UTF8.GetString(buf, 0, rxm.ReceivedBytes);
+        }
+        finally
+        {
+            if (buf != null)
+                ArrayPool<byte>.Shared.Return(buf);
+        }
+        return ret;
     }
 
     public async Task<TObject> ReceiveAsync<TObject>(CancellationToken cancel) where TObject : class, new()
@@ -55,41 +120,8 @@ public class JsonWebSocket : IWebSocketWrapper, IDisposable
         try
         {
             buf = ArrayPool<byte>.Shared.Rent(BufferSize);
-
-            WebSocketReceiveResult result;
-            do
-            {
-                await WebSocketReaderLock.WaitAsync(cancel);
-                try
-                {
-                    result = await WebSocket.ReceiveAsync(new ArraySegment<byte>(buf), cancel);
-                }
-                finally
-                {
-                    WebSocketReaderLock.Release();
-                }
-
-                // handle remote closures
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    await WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server side closure", cancel);
-                    try
-                    {
-                        WebSocketClosed?.Invoke(this, new EventArgs());
-                        throw new WebSocketException("Closed while receiving.");
-                    }
-                    catch (Exception exClosedEvent)
-                    {
-                        logger.LogWarning(exClosedEvent, "WebSocketClosed event failed.");
-                    }
-                }
-
-                if (result.MessageType == WebSocketMessageType.Binary)
-                    logger.LogWarning("Received {wsMsgType}.{wsMsgTypeValue} instead of Text. Proceeding.", nameof(WebSocketMessageType), result.MessageType);
-            }
-            while (!result.EndOfMessage);
-
-            retObj = await DeserializeObject<TObject>(buf, cancel);
+            var rxm = await ReceiveMessageAsync(buf, cancel);
+            retObj = await DeserializeObject<TObject>(buf, rxm.ReceivedBytes, cancel);
         }
         finally
         {
@@ -118,6 +150,9 @@ public class JsonWebSocket : IWebSocketWrapper, IDisposable
                 ArrayPool<byte>.Shared.Return(buf);
         }
     }
+
+    public async Task DisconnectAsync(string reason, CancellationToken cancel) => await WebSocketWrapper.DisconnectAsync(reason, cancel);
+    public async Task ConnectAsync(Uri endpoint, CancellationToken cancel) => await WebSocketWrapper.ConnectAsync(endpoint, cancel);
 
     public JsonWebSocket(IWebSocketWrapper webSocketWrapper, ILogger<JsonWebSocket> logger)
     {

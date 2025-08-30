@@ -11,8 +11,6 @@ public class Program
     public static async Task Main(string[] args)
     {
         // https://devblogs.microsoft.com/dotnet/introducing-c-source-generators/
-        
-        await CL.Cli.RunAsync<Commands.Root>(args);
         /*
         CL.Cli.RunWithServices<Commands.Root>(args, services =>
         {
@@ -32,6 +30,6 @@ public class Program
             services.AddTransient<IGreetingService, GreetingService>();
         });
         */
-        await Task.CompletedTask;
+        await CL.Cli.RunAsync<Commands.Root>(args);
     }
 }
