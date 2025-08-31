@@ -42,10 +42,12 @@ public class JsonWebSocket : IWebSocketWrapper, IDisposable
 
     public JsonSerializerOptions JsonOptionsSend { get; set; } = new JsonSerializerOptions();
 
+    public bool IsConnected => WebSocketWrapper.IsConnected;
+
     protected virtual async Task<TObject> DeserializeObject<TObject>(byte[] buffer, int rxCnt, CancellationToken cancel) where TObject : class, new()
     {
         return await JsonSerializer.DeserializeAsync<TObject>(new MemoryStream(buffer, 0, rxCnt), JsonOptionsReceive, cancel)
-            ?? new TObject();
+            ?? throw new JsonException($"Failed to obtain an {typeof(TObject).FullName} object through deserialization.");
     }
 
     protected record MessageReceptionResult(int ReceivedBytes, bool IsComplete, WebSocketMessageType MessageType);

@@ -20,6 +20,8 @@ public interface IWebSocketWrapper : IDisposable
     /// </summary>
     WS.WebSocket WebSocket { get; }
 
+    bool IsConnected { get; }
+
     Task ConnectAsync(Uri endpoint, CancellationToken cancel);
     Task DisconnectAsync(string reason, CancellationToken cancel);
 }

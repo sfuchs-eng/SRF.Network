@@ -9,7 +9,7 @@ namespace SRF.Network.WebSocket;
 /// <summary>
 /// Skips SSL/TLS certificate validation entirely.
 /// </summary>
-public class InsecureWebSocket : IWebSocketWrapper, IDisposable
+public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
 {
     private HttpClient? httpClient;
 
@@ -18,11 +18,14 @@ public class InsecureWebSocket : IWebSocketWrapper, IDisposable
     public TimeSpan KeepAliveInterval { get; set; } = TimeSpan.FromSeconds(30);
 
     public WS.WebSocket? WebSocketInternal { get; set; }
-    public WS.WebSocket WebSocket => WebSocketInternal ?? throw new ArgumentNullException(nameof(WebSocketInternal), "No WebSocketInternal object to return. Have you connected?");
+    public WS.WebSocket WebSocket => WebSocketInternal
+        ?? throw new ArgumentNullException(nameof(WebSocketInternal), "No WebSocketInternal object to return. Have you connected?");
 
     public SemaphoreSlim WebSocketReaderLock { get; } = new(1);
 
     public SemaphoreSlim WebSocketWriterLock { get; } = new(1);
+
+    public bool IsConnected => WebSocket.State == WebSocketState.Open;
 
     public async Task DisconnectAsync(string reason, CancellationToken cancel)
     {
@@ -97,8 +100,5 @@ public class InsecureWebSocket : IWebSocketWrapper, IDisposable
             return true;
         }
     };
-
-    public InsecureWebSocket(ILogger logger)
-    {
-    }
+    private readonly ILogger logger = logger;
 }
