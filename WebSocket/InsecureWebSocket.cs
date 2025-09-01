@@ -87,10 +87,18 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
         if (_disposed || !disposing)
             return;
         _disposed = true;
-        WebSocketInternal?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
-        WebSocketInternal?.Dispose();
-        httpClient?.CancelPendingRequests();
-        httpClient?.Dispose();
+        try
+        {
+            WebSocketInternal?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
+            httpClient?.CancelPendingRequests();
+        }
+        catch { }
+        try
+        {
+            WebSocketInternal?.Dispose();
+            httpClient?.Dispose();
+        }
+        catch { }
     }
 
     private static readonly HttpClientHandler httpClientHandler = new()
