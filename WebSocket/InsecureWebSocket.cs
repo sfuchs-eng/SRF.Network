@@ -11,7 +11,7 @@ namespace SRF.Network.WebSocket;
 /// </summary>
 public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
 {
-    private HttpClient? httpClient;
+    private readonly HttpClient httpClient = new(httpClientHandler);
 
     public Action<HttpRequestHeaders> ConfigureHeaders { get; init; } = (header) => { };
 
@@ -25,7 +25,7 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
 
     public SemaphoreSlim WebSocketWriterLock { get; } = new(1);
 
-    public bool IsConnected => WebSocket.State == WebSocketState.Open;
+    public bool IsConnected => (WebSocketInternal?.State ?? WebSocketState.None) == WebSocketState.Open;
 
     public async Task DisconnectAsync(string reason, CancellationToken cancel)
     {
@@ -39,12 +39,6 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
 
     public async Task ConnectAsync(Uri endpoint, CancellationToken cancel)
     {
-        if (httpClient != null)
-        {
-            httpClient.CancelPendingRequests();
-            httpClient.Dispose();
-        }
-        httpClient = new HttpClient(httpClientHandler);
         var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
         req.Headers.Add("Connection", "Upgrade");
         req.Headers.Add("Upgrade", "websocket");
@@ -90,15 +84,18 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
         try
         {
             WebSocketInternal?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
-            httpClient?.CancelPendingRequests();
+            httpClient.CancelPendingRequests();
         }
         catch { }
         try
         {
             WebSocketInternal?.Dispose();
-            httpClient?.Dispose();
         }
         catch { }
+        finally
+        {
+            WebSocketInternal = null;
+        }
     }
 
     private static readonly HttpClientHandler httpClientHandler = new()
