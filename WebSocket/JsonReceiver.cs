@@ -8,6 +8,7 @@ namespace SRF.Network.WebSocket;
 public class JsonReceiver<TJsonObjects> : BackgroundService, IDisposable where TJsonObjects : class, new()
 {
     public JsonReceiver(
+        SRF.Network.Misc.HttpClientNoCertValidation httpClientNoCertValidation,
         IOptions<JsonReceiverConfig<TJsonObjects>> options,
         ILogger<InsecureWebSocket> insecureWsLogger,
         ILogger<JsonWebSocket> wsLogger,
@@ -21,7 +22,7 @@ public class JsonReceiver<TJsonObjects> : BackgroundService, IDisposable where T
             throw new NotImplementedException("Secure WebSocket connections with certificate validation are not implemented yet. Insecure = true and wss:// url results in an encrypted connection without certificate validation.");
         }
 
-        jsonWebSocket = new JsonWebSocket(new InsecureWebSocket(insecureWsLogger)
+        jsonWebSocket = new JsonWebSocket(new InsecureWebSocket(httpClientNoCertValidation, insecureWsLogger)
         {
             ConfigureHeaders = (headers) =>
             {

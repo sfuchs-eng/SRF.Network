@@ -16,4 +16,8 @@
     <Folder Include="Extensions/" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../Misc/SRF.Network.Misc.csproj" />
+  </ItemGroup>
+
 </Project>

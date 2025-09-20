@@ -2,6 +2,7 @@ using System;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using Microsoft.Extensions.Logging;
+using SRF.Network.Misc;
 using WS = System.Net.WebSockets;
 
 namespace SRF.Network.WebSocket;
@@ -9,10 +10,11 @@ namespace SRF.Network.WebSocket;
 /// <summary>
 /// Skips SSL/TLS certificate validation entirely.
 /// </summary>
-public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
+public class InsecureWebSocket(
+    SRF.Network.Misc.HttpClientNoCertValidation httpClientNoCertValidation,
+    ILogger logger
+    ) : IWebSocketWrapper, IDisposable
 {
-    private readonly HttpClient httpClient = new(httpClientHandler);
-
     public Action<HttpRequestHeaders> ConfigureHeaders { get; init; } = (header) => { };
 
     public TimeSpan KeepAliveInterval { get; set; } = TimeSpan.FromSeconds(30);
@@ -47,7 +49,7 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
         ConfigureHeaders(req.Headers);
         // req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "token");
 
-        var resp = await httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancel);
+        var resp = await httpClientNoCertValidation.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancel);
 
         if (resp.StatusCode != System.Net.HttpStatusCode.SwitchingProtocols)
         {
@@ -78,13 +80,14 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
 
     private void Dispose(bool disposing)
     {
+        // never dispose of underlying HttpClient! Dispose of websocket or not? Rather not?
         if (_disposed || !disposing)
             return;
         _disposed = true;
         try
         {
             WebSocketInternal?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
-            httpClient.CancelPendingRequests();
+            httpClientNoCertValidation.CancelPendingRequests();
         }
         catch { }
         try
@@ -98,12 +101,6 @@ public class InsecureWebSocket(ILogger logger) : IWebSocketWrapper, IDisposable
         }
     }
 
-    private static readonly HttpClientHandler httpClientHandler = new()
-    {
-        ServerCertificateCustomValidationCallback = (msg, cert, chain, sslPolicyErrors) =>
-        {
-            return true;
-        }
-    };
+    private readonly HttpClientNoCertValidation httpClientNoCertValidation = httpClientNoCertValidation;
     private readonly ILogger logger = logger;
 }
