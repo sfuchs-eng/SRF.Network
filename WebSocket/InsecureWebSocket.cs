@@ -86,7 +86,7 @@ public class InsecureWebSocket(
         _disposed = true;
         try
         {
-            WebSocketInternal?.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
+            WebSocketInternal?.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, "object disposed", CancellationToken.None).Wait();
             httpClientNoCertValidation.CancelPendingRequests();
         }
         catch { }

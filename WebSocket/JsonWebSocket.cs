@@ -71,7 +71,9 @@ public class JsonWebSocket : IWebSocketWrapper, IDisposable
             // handle remote closures
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                await WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server side closure", cancel);
+                //await WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server side closure", cancel);
+                logger.LogTrace("Close message type received. Closing.");
+                await WebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Server side closure", cancel);
                 try
                 {
                     WebSocketClosed?.Invoke(this, new EventArgs());
