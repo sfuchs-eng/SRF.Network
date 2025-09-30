@@ -10,7 +10,7 @@ public class MqttLoggingProxy : IMqttNetLogger
     private readonly Dictionary<MqttNetLogLevel, LogLevel> LogLevelMap = new Dictionary<MqttNetLogLevel, LogLevel>();
     private readonly ILoggerFactory loggerFactory;
 
-    public event EventHandler<MqttNetLogMessagePublishedEventArgs>? LogMessagePublished;
+    //public event EventHandler<MqttNetLogMessagePublishedEventArgs>? LogMessagePublished;
 
     public MqttLoggingProxy(ILoggerFactory loggerFactory)
     {
