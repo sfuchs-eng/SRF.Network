@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using MQTTnet.Client;
+using MQTTnet;
 using MQTTnet.Protocol;
 
 namespace SRF.Network.Mqtt;

@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
+using MQTTnet;
 
 namespace SRF.Network.Mqtt;
 

@@ -10,7 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.*" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.*" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.*" />
-    <PackageReference Include="MQTTnet" Version="4.3.*" />
+    <PackageReference Include="MQTTnet" Version="5.0.*" />
   </ItemGroup>
 
 </Project>

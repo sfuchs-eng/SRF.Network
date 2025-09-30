@@ -1,23 +1,19 @@
 ﻿using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
-using MQTTnet.Client;
 using MQTTnet;
-using MQTTnet.Diagnostics;
 using System.Collections.Concurrent;
+using MQTTnet.Diagnostics.Logger;
 
 namespace SRF.Network.Mqtt;
 
-public class MqttBrokerConnection(
-    IOptions<MqttOptions> options,
-    ILogger<MqttBrokerConnection> logger,
-    IMqttNetLogger mqttNetLogger
-    ) : IHostedService, IMqttBrokerConnection, IDisposable
+public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisposable
 {
-    private MqttOptions Config { get; } = options.Value;
-    private ILogger<MqttBrokerConnection> Logger { get; } = logger;
-    private IMqttNetLogger MqttNetLogger { get; } = mqttNetLogger;
+    private MqttOptions Config { get; }
+    private ILogger<MqttBrokerConnection> Logger { get; }
+    private IMqttNetLogger MqttNetLogger { get; }
 
+    public MqttClientFactory MqttClientFactory { get; set; }
     public IMqttClient? Client { get; private set; } = null;
 
     public bool IsConnected => Client?.IsConnected ?? false;
@@ -102,7 +98,7 @@ public class MqttBrokerConnection(
             .WithCredentials(Config.User, Config.Pass)
             .WithKeepAlivePeriod(TimeSpan.FromSeconds(Config.KeepAlifeTime))
             .WithTimeout(TimeSpan.FromSeconds(Math.Max(Config.PingInterval,Config.KeepAlifeTime)*5))
-            .WithoutThrowOnNonSuccessfulConnectResponse()
+            //.WithoutThrowOnNonSuccessfulConnectResponse()
             .Build();
     }
 
@@ -113,7 +109,7 @@ public class MqttBrokerConnection(
 
         AbortOperations = new CancellationTokenSource();
 
-        var mqttFactory = new MqttFactory(MqttNetLogger);
+        var mqttFactory = MqttClientFactory;
         Client = mqttFactory.CreateMqttClient(MqttNetLogger);
         Client.ConnectedAsync += Client_ConnectedAsync;
         Client.DisconnectedAsync += Client_DisconnectedAsync;
@@ -223,7 +219,7 @@ public class MqttBrokerConnection(
                 var subsRes = await Client.SubscribeAsync(new MqttClientSubscribeOptions()
                 {
                     TopicFilters = filters
-                });
+                }, cancel);
 
                 var subsResDix = subsRes.Items.ToDictionary(k => k.TopicFilter.Topic, v => v);
                 var notificationTasks = Subscriptions
@@ -345,6 +341,18 @@ public class MqttBrokerConnection(
     }
 
     private bool disposed = false;
+
+    public MqttBrokerConnection(
+        IOptions<MqttOptions> options,
+        ILogger<MqttBrokerConnection> logger,
+        IMqttNetLogger mqttNetLogger
+    )
+    {
+        Config = options.Value;
+        Logger = logger;
+        MqttNetLogger = mqttNetLogger;
+        MqttClientFactory = new MqttClientFactory(MqttNetLogger);
+    }
 
     public void Dispose(bool disposing)
     {

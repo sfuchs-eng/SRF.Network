@@ -7,7 +7,7 @@ public static class MqttHostingExtensions
 {
     public static IServiceCollection AddMqtt(this IServiceCollection s, string? configSection)
     {
-        s.AddTransient<MQTTnet.Diagnostics.IMqttNetLogger, MqttLoggingProxy>();
+        s.AddTransient<MQTTnet.Diagnostics.Logger.IMqttNetLogger, MqttLoggingProxy>();
         s.AddOptions<MqttOptions>().BindConfiguration(configSection ?? MqttOptions.DefaultConfigSectionName);
         s.AddSingleton<IMqttBrokerConnection, MqttBrokerConnection>();
         s.AddHostedService<ConnectionManager>();
