@@ -5,35 +5,34 @@ Originally built for a custom home automation solution, use is expanding meanwhi
 
 ## Presently included
 
-- `Cli`
+- `Cli`  
 Command line interface tool, primarily for manual integration testing
 
-- `Misc`
+- `Misc`  
 Various extensions, helpers, ...
     - e.g. the `HttpClientNoCertValidation`
 
-- `Mqtt`
+- `Mqtt`  
 A wrapper library bringing [MQTTnet](https://github.com/dotnet/MQTTnet) into a dependency injection / hosting context.
 
-- `Test`
+- `Test`  
 (empty) unit test library. Only used for debugging issues observed in real-life applications.
 
-- `WebSocket`
+- `WebSocket`  
 Client (Json)WebSocket related wrappers and helpers designed to receive streams of Json objects from a server.
 
 
 ## Planned, time-line open
 
-- `OpenHab`
+- `OpenHab`  
 C# .NET stack handling a subset of the item/channel related events on an [OpenHAB](https://www.openhab.org/) [event bus](https://www.openhab.org/docs/developer/utils/events.html#api-introduction) connected to via a WebSocket.  
 Existing .NET Framework 4.8 code awaits porting to .NET 9+ into this solution here.
 
 
 ## Other
 
-- `Knx`
-Yet another [KNX](https://support.knx.org/hc/en-us) IP library to handle read/write/read-answer group object messages in a KNX Net/IP routing setup.
+- `Knx`  
 Planning to switch over to using the KNX Falcon SDK instead of a simplisitic custom library.
 References:
-- [Knx.Falcon.Sdk on nuget.org](https://www.nuget.org/packages/Knx.Falcon.Sdk)
-- [Falcon.SDK 6, Get started page on knx.org](https://support.knx.org/hc/en-us/sections/4410811049618-Get-Started)
+    - [Knx.Falcon.Sdk on nuget.org](https://www.nuget.org/packages/Knx.Falcon.Sdk)
+    - [Falcon.SDK 6, Get started page on knx.org](https://support.knx.org/hc/en-us/sections/4410811049618-Get-Started)
