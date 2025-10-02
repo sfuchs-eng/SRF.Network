@@ -28,9 +28,12 @@ Client (Json)WebSocket related wrappers and helpers designed to receive streams 
 C# .NET stack handling a subset of the item/channel related events on an [OpenHAB](https://www.openhab.org/) [event bus](https://www.openhab.org/docs/developer/utils/events.html#api-introduction) connected to via a WebSocket.  
 Existing .NET Framework 4.8 code awaits porting to .NET 9+ into this solution here.
 
+
+## Other
+
 - `Knx`
-KNX Net/IP Routing library allowing .NET applications to interact with KNX systems through reading/writing group address values.
-    - not homologized, not standards compliant
-    - limited to receiving Group Address read/write/read-answer packets
-    - only routing connections using UDP broadcasts, no tunnelling connections to a Knx/IP router.
-    - integrating with the KNX Group Address export XML file of ETS 5
+Yet another [KNX](https://support.knx.org/hc/en-us) IP library to handle read/write/read-answer group object messages in a KNX Net/IP routing setup.
+Planning to switch over to using the KNX Falcon SDK instead of a simplisitic custom library.
+References:
+- [Knx.Falcon.Sdk on nuget.org](https://www.nuget.org/packages/Knx.Falcon.Sdk)
+- [Falcon.SDK 6, Get started page on knx.org](https://support.knx.org/hc/en-us/sections/4410811049618-Get-Started)
