@@ -26,9 +26,9 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
     /// <summary>
     /// Queue of pending subscriptions not executed yet.
     /// </summary>
-    private BlockingCollection<Subscription> PendingSubscriptions { get; } = new BlockingCollection<Subscription>();
+    private BlockingCollection<Subscription> PendingSubscriptions { get; } = [];
 
-    private BlockingCollection<PublishingQueueItem> PublishingQueue { get; } = new BlockingCollection<PublishingQueueItem>();
+    private BlockingCollection<PublishingQueueItem> PublishingQueue { get; } = [];
 
     private Task? ConnectionRunnerTask { get; set; } = null;
     private Task? SubscriberTask { get; set; } = null;
@@ -269,7 +269,7 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
                     // no connection, put item back and wait. Then continue to take and publish.
                     PublishingQueue.Add(pub);
                     Logger.LogWarning("PublishingRunner: client is disconnected. Waiting for connection.");
-                    await Task.Delay(Config.PublishRetryInterval);
+                    await Task.Delay(TimeSpan.FromSeconds(Config.PublishRetryInterval), cancel);
                     continue;
                 }
                 await pub.PublishAsync(Client, Logger, cancel);
