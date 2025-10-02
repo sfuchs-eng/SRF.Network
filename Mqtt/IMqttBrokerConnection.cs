@@ -3,7 +3,13 @@ using MQTTnet;
 
 namespace SRF.Network.Mqtt;
 
-public interface IMqttBrokerConnection : IHostedService
+/// <summary>
+/// Abstraction of a client connection to an MQTT broker.
+/// Use <see cref="Hosting.MqttHostingExtensions.AddMqtt(Microsoft.Extensions.DependencyInjection.IServiceCollection, string?)"/> or similar methods
+/// to get the <see cref="MqttBrokerConnection"/> implementation of this interface injected into your services including
+/// a background service managing the connection and the publishing queue as well as the options <see cref="MqttOptions"/>.
+/// </summary> <summary>
+public interface IMqttBrokerConnection : IHostedService, IDisposable
 {
     IMqttClient? Client { get; }
 
@@ -12,7 +18,7 @@ public interface IMqttBrokerConnection : IHostedService
     /// <summary>
     /// Yield a task running on the thread pool that blocks until another thread has (re)connected.
     /// </summary>
-    Task WaitForConnectedAsync(CancellationToken cancel);
+    Task WaitUntilConnectedAsync(CancellationToken cancel);
 
     /// <summary>
     /// Enqueues a <see cref="PublisherString"/>.

@@ -1,5 +1,4 @@
-﻿using MQTTnet.Diagnostics;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MQTTnet.Diagnostics.Logger;
 
 namespace SRF.Network.Mqtt;

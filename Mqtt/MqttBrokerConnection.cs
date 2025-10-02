@@ -324,7 +324,7 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
     /// </summary>
     /// <returns>The for connected async.</returns>
     /// <param name="cancel">Cancel.</param>
-    public async Task WaitForConnectedAsync(CancellationToken cancel)
+    public async Task WaitUntilConnectedAsync(CancellationToken cancel)
     {
         await Task.Run(() => synchronizeConnected.Wait(cancel), cancel);
     }

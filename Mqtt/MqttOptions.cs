@@ -2,6 +2,10 @@
 
 namespace SRF.Network.Mqtt;
 
+/// <summary>
+/// Options for an MQTT connection via <see cref="IMqttBrokerConnection"/> or the <see cref="MqttBrokerConnection"/> implementation of it
+/// in an <code>appsettings.json</code> file or other configuration source.
+/// </summary>
 public class MqttOptions
 {
     public static readonly string DefaultConfigSectionName = "Mqtt";
