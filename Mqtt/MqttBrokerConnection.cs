@@ -30,9 +30,6 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
 
     private BlockingCollection<PublishingQueueItem> PublishingQueue { get; } = [];
 
-    private Task? ConnectionRunnerTask { get; set; } = null;
-    private Task? SubscriberTask { get; set; } = null;
-    private Task? PublisherTask { get; set; } = null;
     private CancellationTokenSource AbortOperations { get; set; } = new CancellationTokenSource();
 
     public PublishingQueueItem Publish(string topic, string message, EventHandler<PublishEventArgs>? publishedEventHandler = null)
@@ -104,9 +101,6 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (ConnectionRunnerTask != null)
-            throw new NotSupportedException("Multiple call of StartAsync is not supported.");
-
         AbortOperations = new CancellationTokenSource();
 
         var mqttFactory = MqttClientFactory;
@@ -142,9 +136,9 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
 
         if (!Config.DisableConnection)
         {
-            ConnectionRunnerTask = Task.Run(async () => await ConnectionRunner(AbortOperations.Token), cancellationToken);
-            SubscriberTask = Task.Run(async () => await SubscriberRunner(AbortOperations.Token), cancellationToken);
-            PublisherTask = Task.Run(async () => await PublishingRunner(AbortOperations.Token), cancellationToken);
+            _ = Task.Run(() => ConnectionRunner(AbortOperations.Token), cancellationToken);
+            _ = Task.Run(() => SubscriberRunner(AbortOperations.Token), cancellationToken);
+            _ = Task.Run(() => PublishingRunner(AbortOperations.Token), cancellationToken);
         }
     }
 
