@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Misc", "Misc\SR
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Mqtt", "Mqtt\SRF.Network.Mqtt.csproj", "{ECF9999F-F504-436E-AA28-234F9FCAD52C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Knx", "Knx\SRF.Network.Knx.csproj", "{5538F144-D39A-444C-8E70-5FF187EDCBCE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{ECF9999F-F504-436E-AA28-234F9FCAD52C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ECF9999F-F504-436E-AA28-234F9FCAD52C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ECF9999F-F504-436E-AA28-234F9FCAD52C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
