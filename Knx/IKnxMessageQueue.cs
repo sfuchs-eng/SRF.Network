@@ -3,6 +3,7 @@ namespace SRF.Network.Knx;
 /// <summary>
 /// Processes the <see cref="IKnxMessage"/> instances that are received from the KNX bus.
 /// </summary>
+[Obsolete]
 public interface IKnxMessageQueue
 {
     public void Enqueue(KnxMessageContext message);

@@ -4,12 +4,12 @@ using Knx.Falcon.Discovery;
 using Knx.Falcon.Sdk;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SRF.Network.Knx.FalconSupport;
 
 namespace SRF.Network.Knx.Connection;
 
 public class KnxConnection : IKnxConnection
 {
-    private readonly IKnxMessageQueue messageQueue;
     private readonly KnxConfiguration config;
     private readonly ILogger<KnxConnection> logger;
     private readonly KnxBus knxBus;
@@ -18,12 +18,13 @@ public class KnxConnection : IKnxConnection
 
     public event EventHandler<KnxConnectionEventArgs>? ConnectionStatusChanged;
 
+    public event EventHandler<KnxMessageReceivedEventArgs>? MessageReceived;
+
     public KnxConnection(
-        IKnxMessageQueue messageQueue,
+        FalconInitializer falconInitializer, // must be constructed before any other Knx.Falcon class is instanciated.
         IOptions<KnxConfiguration> options,
         ILogger<KnxConnection> logger)
     {
-        this.messageQueue = messageQueue;
         this.config = options.Value;
         this.logger = logger;
 
@@ -48,11 +49,13 @@ public class KnxConnection : IKnxConnection
         knxBus.ConnectionStateChanged += (s, e) => { OnConnectionStatusChanged(e); };
     }
 
+    /// <summary>
+    /// If no cancellation token is provided, there's an internal 60s timeout token being generated.
+    /// </summary>
     public static IAsyncEnumerable<IpDeviceDiscoveryResult> DiscoverKnxIpDevicesAsync(CancellationToken? token = null)
     {
-        var tok = (CancellationToken)(token ?? new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
-        var discovery = new IpDeviceDiscovery();
-        return discovery.DiscoverAsync(tok);
+        var discovery = new IpDeviceDiscovery() { UseExtendedSearch = true, UseV1Search = true };
+        return discovery.DiscoverAsync(token ?? new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token);
     }
 
     public void Connect()
@@ -61,13 +64,14 @@ public class KnxConnection : IKnxConnection
         {
             knxBus.Connect();
             knxBus.GroupMessageReceived += OnGroupMessageReceived;
-            knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
+            //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
         }
     }
 
     public void Disconnect()
     {
         knxBus.GroupMessageReceived -= OnGroupMessageReceived;
+        //knxBus.IoTGroupMessageReceived -= OnIoTGroupMessageReceived;
     }
 
     public void SendMessage(IKnxMessage message)
@@ -84,11 +88,20 @@ public class KnxConnection : IKnxConnection
 
     private void OnGroupMessageReceived(object? sender, GroupEventArgs e)
     {
-        messageQueue.Enqueue(new KnxMessageContext(e));
+        try
+        {
+            MessageReceived?.Invoke(this, new KnxMessageReceivedEventArgs(e));
+        }
+        catch ( Exception ex )
+        {
+            logger.LogWarning(ex, "Failed to process KNX Group Message: {groupAddress} from {sourceAddress}",
+                e.DestinationAddress.Address.To3LGroupAddress(),
+                e.SourceAddress.FullAddress.To3LIndividualAddress());
+        }
     }
 
     private void OnIoTGroupMessageReceived(object? sender, IoTGroupEventArgs e)
     {
-        messageQueue.Enqueue(new KnxMessageContext(e));
+        logger.LogWarning("{methodName} for handling IoT group messages is not implemented yet.", nameof(OnIoTGroupMessageReceived));
     }
 }
