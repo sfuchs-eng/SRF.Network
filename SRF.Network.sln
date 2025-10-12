@@ -15,6 +15,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Mqtt", "Mqtt\SR
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Network.Knx", "Knx\SRF.Network.Knx.csproj", "{5538F144-D39A-444C-8E70-5FF187EDCBCE}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Subs", "Subs", "{E68C8654-57FA-45AD-8D96-7570A929E318}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SRF.Industrial", "SRF.Industrial", "{D04FCFCC-5079-432A-A1C7-75F350C0731A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Industrial.Events", "Subs\SRF.Industrial\Events\SRF.Industrial.Events.csproj", "{9B2C3B06-9FCD-49D7-BD76-605D956E733D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRF.Industrial.Events.Sample", "Subs\SRF.Industrial\Events.Sample\SRF.Industrial.Events.Sample.csproj", "{5FF1C9C0-466F-49BD-BDF2-C6D6B0E67A6C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -48,5 +56,18 @@ Global
 		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5538F144-D39A-444C-8E70-5FF187EDCBCE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B2C3B06-9FCD-49D7-BD76-605D956E733D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B2C3B06-9FCD-49D7-BD76-605D956E733D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B2C3B06-9FCD-49D7-BD76-605D956E733D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B2C3B06-9FCD-49D7-BD76-605D956E733D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5FF1C9C0-466F-49BD-BDF2-C6D6B0E67A6C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5FF1C9C0-466F-49BD-BDF2-C6D6B0E67A6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5FF1C9C0-466F-49BD-BDF2-C6D6B0E67A6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5FF1C9C0-466F-49BD-BDF2-C6D6B0E67A6C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D04FCFCC-5079-432A-A1C7-75F350C0731A} = {E68C8654-57FA-45AD-8D96-7570A929E318}
+		{9B2C3B06-9FCD-49D7-BD76-605D956E733D} = {D04FCFCC-5079-432A-A1C7-75F350C0731A}
+		{5FF1C9C0-466F-49BD-BDF2-C6D6B0E67A6C} = {D04FCFCC-5079-432A-A1C7-75F350C0731A}
 	EndGlobalSection
 EndGlobal
