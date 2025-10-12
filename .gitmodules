@@ -1,0 +1,3 @@
+[submodule "Subs/SRF.Industrial"]
+	path = Subs/SRF.Industrial
+	url = https://github.com/sfuchs-eng/SRF.Industrial
