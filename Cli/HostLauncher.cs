@@ -10,7 +10,8 @@ public class HostLauncher<TCommand>() where TCommand : BackgroundService
 {
     protected virtual void AddConfiguration(IConfigurationBuilder configurationBuilder, CliContext cliContext)
     {
-        configurationBuilder.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+        configurationBuilder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+        configurationBuilder.AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SRF.Network.json"), optional: false, reloadOnChange: true);
         configurationBuilder.AddCommandLine([.. cliContext.Result.ParseResult.UnmatchedTokens]);
     }
 
@@ -34,6 +35,11 @@ public class HostLauncher<TCommand>() where TCommand : BackgroundService
         AddLogging(hostBuilder.Logging, cliContext);
         AddServices(hostBuilder.Services, cliContext);
 
+        /*
+        foreach (var cs in hostBuilder.Configuration.AsEnumerable().Select(c => $"{c.Key} = '{c.Value}'"))
+            Console.WriteLine($"- {cs}");
+            */
+            
         using var host = hostBuilder.Build();
 
         await host.RunAsync();

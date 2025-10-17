@@ -19,14 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Knx\SRF.Network.Knx.csproj" />
     <ProjectReference Include="..\WebSocket\SRF.Network.WebSocket.csproj" />
     <Content Include="appsettings.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Knx\SRF.Network.Knx.csproj" />
   </ItemGroup>
 
 </Project>

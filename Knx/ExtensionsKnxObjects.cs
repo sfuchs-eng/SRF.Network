@@ -24,14 +24,14 @@ public static class ExtensionsKnxObjects
         }
     }
 
-    internal static readonly Dictionary<int,KnxAddressLevelMask> GroupAddressMasks = new()
+    private static readonly Dictionary<int,KnxAddressLevelMask> GroupAddressMasks = new()
     {
         [1] = new(0b_0000_0000_1111_1111, 0), // level 1
         [2] = new(0b_0000_0111_0000_0000, 8), // level 2
         [3] = new(0b_1111_1000_0000_0000, 11),// level 3
     };
 
-    internal static readonly Dictionary<int, KnxAddressLevelMask> IndividualAddressMasks = new()
+    private static readonly Dictionary<int, KnxAddressLevelMask> IndividualAddressMasks = new()
     {
         [1] = new(0b_0000_0000_1111_1111, 0), // level 1
         [2] = new(0b_0000_1111_0000_0000, 8), // level 2
@@ -69,7 +69,13 @@ public static class ExtensionsKnxObjects
         return string.Join(separator, groupAddress.ToIndividualAddressTriple());
     }
 
-    internal static ushort ToKnxAddress(this string knxAddress, Dictionary<int,KnxAddressLevelMask> demasker)
+    public static ushort ToKnxGroupAddress(this string knxAddress)
+    {
+        return knxAddress.ToKnxAddress(GroupAddressMasks);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static ushort ToKnxAddress(this string knxAddress, Dictionary<int, KnxAddressLevelMask> demasker)
     {
         try
         {
