@@ -94,7 +94,7 @@ public class DomainConfigurationFactory(
     {
         var xdoc = XDocument.Load(knxOptions.Value.EtsGAExportFile);
         var gaElems = xdoc.Descendants().Where(e => e.Name.LocalName.Equals("GroupAddress"));
-        logger.LogTrace("Got {no} GA Elements", gaElems.Count());
+        logger.LogTrace("Parsing {no} Group Address elements from '{EtsGAExportFile}'...", gaElems.Count(), knxOptions.Value.EtsGAExportFile);
         var ser = new XmlSerializer(typeof(GroupAddressConfiguration));
         Dictionary<ushort, GroupAddressConfiguration> gacs = [];
         foreach (var rdr in gaElems.Select(e => e.CreateReader()))
@@ -106,7 +106,7 @@ public class DomainConfigurationFactory(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to deserialized GroupAddress node: '{nodeContents}', does the namespace match?",
+                logger.LogError(ex, "Failed to deserialized GroupAddress node: '{nodeName}', does the namespace match?",
                     rdr.Name);
             }
         }
