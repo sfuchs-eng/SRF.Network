@@ -2,6 +2,7 @@ using Knx.Falcon.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using SRF.Network.Knx.Domain;
 using SRF.Network.Knx.FalconSupport;
+using SRF.Network.Misc;
 
 namespace SRF.Network.Knx;
 
@@ -20,6 +21,8 @@ public static class ExtensionsHosting
         services.AddSingleton<IFalconLoggerFactory, MSLoggingFalconLoggerFactory>();
         services.AddSingleton<FalconInitializer>();
         services.AddSingleton<IDomainConfigurationFactory, DomainConfigurationFactory>();
+
+        services.AddSingleton<ITimeProvider, NowTimeProvider>();
 
         services.AddSingleton<IKnxConnection, TConnector>();
         return services;

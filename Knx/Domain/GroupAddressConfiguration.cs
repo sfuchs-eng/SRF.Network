@@ -24,11 +24,6 @@ public class GroupAddressConfiguration
     [XmlAttribute]
     public string? Description { get; set; }
 
-    /// <summary>
-    /// The Name is generated from the Label via a <see cref="ILabelToNameConverter"/>
-    /// configured with the <see cref="DomainConfigurationFactory"/>.
-    /// </summary>
-    /// <value></value>
     [XmlIgnore]
-    public string? Name { get; set; }
+    public GroupAddressExtraConfig Extra { get; set; } = new();
 }

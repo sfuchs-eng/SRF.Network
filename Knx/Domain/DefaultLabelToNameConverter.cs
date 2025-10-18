@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 
 namespace SRF.Network.Knx.Domain;

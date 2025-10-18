@@ -8,8 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Knx.Falcon.Sdk" Version="6.3.*" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Subs\SRF.Industrial\Events\SRF.Industrial.Events.csproj" />
+    <ProjectReference Include="..\Misc\SRF.Network.Misc.csproj" />
   </ItemGroup>
 
 </Project>

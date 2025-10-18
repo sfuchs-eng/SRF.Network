@@ -16,6 +16,8 @@ public class KnxConfiguration
 
     public string EtsGAExportFile { get; set; } = "GroupAddressExport.xml";
 
+    public string KnxDomainConfigFile { get; set; } = "KnxDomainConfig.json";
+
     public string KnxMasterFolder { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
     public class CommSecuritySettings
