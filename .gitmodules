@@ -4,3 +4,4 @@
 [submodule "Subs/SRF.Knx.Config"]
 	path = Subs/SRF.Knx.Config
 	url = sfuchs@asgard.fu:/data/git/SRF.Knx.Config.git
+	branch = ForFalconPath
