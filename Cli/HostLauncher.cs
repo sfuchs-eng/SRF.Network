@@ -1,6 +1,7 @@
 using DotMake.CommandLine;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -10,8 +11,13 @@ public class HostLauncher<TCommand>() where TCommand : BackgroundService
 {
     protected virtual void AddConfiguration(IConfigurationBuilder configurationBuilder, CliContext cliContext)
     {
+        var userConfigPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var userConfigFile = "SRF.Network.json";
+        if (File.Exists(Path.Combine(userConfigPath, userConfigFile)))
+            Console.WriteLine($"Adding config from '{userConfigPath}/{userConfigFile}'");
+            
         configurationBuilder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-        configurationBuilder.AddJsonFile(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SRF.Network.json"), optional: false, reloadOnChange: true);
+        configurationBuilder.AddJsonFile(new PhysicalFileProvider(userConfigPath), userConfigFile, optional: false, reloadOnChange: true);
         configurationBuilder.AddCommandLine([.. cliContext.Result.ParseResult.UnmatchedTokens]);
     }
 

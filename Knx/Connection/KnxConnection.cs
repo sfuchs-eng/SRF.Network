@@ -4,6 +4,7 @@ using Knx.Falcon.Discovery;
 using Knx.Falcon.Sdk;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SRF.Knx.Config;
 using SRF.Network.Knx.FalconSupport;
 
 namespace SRF.Network.Knx.Connection;

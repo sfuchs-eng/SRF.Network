@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Subs\SRF.Industrial\Events\SRF.Industrial.Events.csproj" />
     <ProjectReference Include="..\Misc\SRF.Network.Misc.csproj" />
+    <ProjectReference Include="..\Subs\SRF.Knx.Config\SRF.Knx.Config.csproj" />
   </ItemGroup>
 
 </Project>

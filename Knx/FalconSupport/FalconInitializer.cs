@@ -2,6 +2,7 @@ using Knx.Falcon.Logging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using KNX = Knx.Falcon;
+using SRF.Knx.Config;
 
 namespace SRF.Network.Knx.FalconSupport;
 

@@ -4,9 +4,9 @@ using DotMake.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SRF.Knx.Config.Domain;
 using SRF.Network.Knx;
 using SRF.Network.Knx.Connection;
-using SRF.Network.Knx.Domain;
 
 namespace SRF.Network.Cli.Commands;
 
