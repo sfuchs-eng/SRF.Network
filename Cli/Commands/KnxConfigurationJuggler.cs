@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Xml.Serialization;
 using DotMake.CommandLine;
@@ -7,9 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using SRF.Knx.Config;
-using SRF.Knx.Config.OpenHab.Generate;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Configuration;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -21,6 +18,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
     [CliOption(Alias = "f", Description = "Force overwriting existing files during conversion.")]
     public bool ForceOverwrite { get; set; } = false;
+
+    [CliOption(Alias = "o", Description = "Update OpenHAB configuration")]
+    public bool UdpateOpenHabConfig { get; set; } = false;
 
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
@@ -47,6 +47,11 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             if (cmd.ConvertXmlToJson)
             {
                 ConvertConfigurationXmlToJson();
+            }
+            else if ( cmd.UdpateOpenHabConfig )
+            {
+                var f = serviceProvider.GetRequiredService<IKnxConfigFactory>();
+                f.GenerateUpdatedOpenHabConfig();
             }
             else
             {
