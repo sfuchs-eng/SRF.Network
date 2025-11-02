@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using DotMake.CommandLine;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,13 +11,38 @@ namespace SRF.Network.Cli;
 
 public class HostLauncher<TCommand>() where TCommand : BackgroundService
 {
+    [CliOption(Alias = "j", Required = false, Arity = CliArgumentArity.ExactlyOne, Description = "Write JSON output to filename instead of console.")]
+    public string? JsonOutputFileName { get; set; }
+
+    public TextWriter Output { get; set; } = Console.Out;
+
+    public JsonSerializerOptions JsonOptions { get; set; } = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never,
+        IncludeFields = false
+    };
+
+    public void JsonOutput(object? output)
+    {
+        if (!string.IsNullOrEmpty(JsonOutputFileName))
+        {
+            using var fs = new FileStream(JsonOutputFileName, FileMode.Create);
+            var ow = new StreamWriter(fs, Encoding.UTF8);
+            ow.WriteLine(JsonSerializer.Serialize(output, JsonOptions));
+            ow.Close();
+        }
+        else
+            Output.WriteLine(JsonSerializer.Serialize(output, JsonOptions));
+    }
+
     protected virtual void AddConfiguration(IConfigurationBuilder configurationBuilder, CliContext cliContext)
     {
         var userConfigPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var userConfigFile = "SRF.Network.json";
         if (File.Exists(Path.Combine(userConfigPath, userConfigFile)))
             Console.WriteLine($"Adding config from '{userConfigPath}/{userConfigFile}'");
-            
+
         configurationBuilder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
         configurationBuilder.AddJsonFile(new PhysicalFileProvider(userConfigPath), userConfigFile, optional: false, reloadOnChange: true);
         configurationBuilder.AddCommandLine([.. cliContext.Result.ParseResult.UnmatchedTokens]);

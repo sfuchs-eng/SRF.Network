@@ -4,6 +4,7 @@ using DotMake.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SRF.Knx.Config.Domain;
 using SRF.Network.Knx;
 using SRF.Network.Knx.Connection;
@@ -21,6 +22,9 @@ public class Knx : HostLauncher<Knx.Worker>
 
     [CliOption(Description = "Load domain configuration and display...")]
     public bool Configuration { get; set; } = false;
+
+    [CliOption(Alias = "kc", Description = "Print the KNX related program configuration")]
+    public bool PrintKnxConfiguration { get; set; } = false;
 
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
@@ -44,6 +48,8 @@ public class Knx : HostLauncher<Knx.Worker>
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            bool didSomething = false;
+
             if (cmd.Scan)
             {
                 Console.WriteLine("Scanning for KNX Net/IP devices...");
@@ -70,18 +76,30 @@ public class Knx : HostLauncher<Knx.Worker>
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 }
+                didSomething = true;
             }
 
             if ( cmd.Configuration )
             {
                 //var dc = serviceProvider.GetRequiredService<IDomainConfigurationFactory>().Load();
                 var dc = serviceProvider.GetRequiredService<DomainConfiguration>();
-                Console.WriteLine(JsonSerializer.Serialize(new
+
+                cmd.JsonOutput(new
                 {
-                    NoEtsGA = dc.GroupAddresses.Count
-                }));
+                    NoEtsGA = dc.GroupAddresses.Count,
+                    DomainConfig = dc,
+                    EtsGaWithoutDpt = dc.GroupAddresses.Values.Where(ga => !ga.HasValidDPT),
+                });
+                didSomething = true;
             }
 
+            if (!didSomething || cmd.PrintKnxConfiguration)
+            {
+                var kc = serviceProvider.GetRequiredService<IOptions<SRF.Knx.Config.KnxConfiguration>>();
+                cmd.JsonOutput(new { Knx = kc.Value });
+                didSomething = true;
+            }
+            
             applicationLifetime.StopApplication();
         }
 

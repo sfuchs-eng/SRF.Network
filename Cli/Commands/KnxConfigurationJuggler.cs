@@ -6,7 +6,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using SRF.Knx.Config;
-using System.Text.Json.Serialization;
+using SRF.Knx.Config.Domain;
+using SRF.Knx.Config.OpenHab.MetaConfig;
+using SRF.Knx.Config.OpenHab;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -16,11 +18,17 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "x", Description = "Convert legacy XML configuration to JSON files.")]
     public bool ConvertXmlToJson { get; set; } = false;
 
+    [CliOption(Alias = "lgac", Required = false, Name = "legacy-gac-file", Description = "Full file name of legacy group address configuration file. Use in combination with -x")]
+    public string? LegacyGACFileName { get; set; }
+
     [CliOption(Alias = "f", Description = "Force overwriting existing files during conversion.")]
     public bool ForceOverwrite { get; set; } = false;
 
     [CliOption(Alias = "o", Description = "Update OpenHAB configuration")]
     public bool UdpateOpenHabConfig { get; set; } = false;
+
+    [CliOption(Alias = "om", Description = "Update OpenHAB meta-configuration only, do not create new OpenHAB config files.")]
+    public bool UpdateOpenHabConfigMetaOnly { get; set; } = false;
 
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
@@ -31,12 +39,14 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     public class Worker(
         KnxConfigurationJuggler cmd,
         IOptions<KnxConfiguration> options,
+        IKnxConfigFactory knxConfigFactory,
         IHostApplicationLifetime applicationLifetime,
         ILogger<KnxConfigurationJuggler.Worker> logger,
         IServiceProvider serviceProvider
         ) : BackgroundService
     {
         private readonly KnxConfigurationJuggler cmd = cmd;
+        private readonly IKnxConfigFactory knxConfigFactory = knxConfigFactory;
         private readonly KnxConfiguration config = options.Value;
         private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
         private readonly ILogger<Worker> logger = logger;
@@ -48,10 +58,21 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             {
                 ConvertConfigurationXmlToJson();
             }
-            else if ( cmd.UdpateOpenHabConfig )
+            else if ( cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly )
             {
-                var f = serviceProvider.GetRequiredService<IKnxConfigFactory>();
-                f.GenerateUpdatedOpenHabConfig();
+                var df = serviceProvider.GetRequiredService<IKnxConfigFactory>();
+                var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
+
+                logger.LogWarning("Using deserialization-update-serialization instead of JsonNode based delta updating of files. Implementation of delta-updating pending.");
+                var dc = df.GetDomainConfig();
+                var ohc = of.GetKnxOpenHabConfig(dc);
+                var updates = of.IdentifyConfigurationUpdates(dc, ohc);
+                of.ApplyConfigurationUpdates(updates, ohc);
+                of.SaveMetaConfig(ohc);
+                cmd.JsonOutput(updates);
+
+                if ( !cmd.UpdateOpenHabConfigMetaOnly )
+                    df.GenerateUpdatedOpenHabConfig();
             }
             else
             {
@@ -59,11 +80,8 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 Console.WriteLine(
                     System.Text.Json.JsonSerializer.Serialize(
                         config,
-                        new JsonSerializerOptions()
-                        {
-                            WriteIndented = true,
-                            DefaultIgnoreCondition = JsonIgnoreCondition.Never
-                        }));
+                        KnxConfigFactory.DefaultJsonOptions
+                    ));
             }
             applicationLifetime.StopApplication();
             return Task.CompletedTask;
@@ -105,11 +123,28 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
         /// </summary>
         private void ConvertConfigurationXmlToJson()
         {
-            if (PrepFileConversion(Path.Combine(config.OpenHabTemplatesFolder, "OpenHabItemTemplates.xml"), out string xmlFile, out string jsonFile))
+            if (PrepFileConversion(Path.Combine(config.OpenHab.TemplatesFolder, "OpenHabItemTemplates.xml"), out string xmlFile, out string jsonFile))
                 ConvertXmlToJson<SRF.Knx.Config.OpenHab.MetaConfig.Items.ItemConfigTemplates>(xmlFile, jsonFile);
 
-            if (PrepFileConversion(Path.Combine(config.OpenHabTemplatesFolder, "OpenHabChannelTemplates.xml"), out xmlFile, out jsonFile))
+            if (PrepFileConversion(Path.Combine(config.OpenHab.TemplatesFolder, "OpenHabChannelTemplates.xml"), out xmlFile, out jsonFile))
                 ConvertXmlToJson<SRF.Knx.Config.OpenHab.MetaConfig.Channels.ChannelConfigTemplates>(xmlFile, jsonFile);
+
+            if (!string.IsNullOrWhiteSpace(cmd.LegacyGACFileName))
+            {
+                if (!File.Exists(cmd.LegacyGACFileName))
+                    logger.LogWarning("Legacy GAC '{}' doesn't exist.", cmd.LegacyGACFileName);
+                else
+                {
+                    knxConfigFactory.CreateConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
+                    knxConfigFactory.SaveDomainConfig(domainConfig);
+                    var ohf = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
+                    ohf.SaveMetaConfig(openHabConfig);
+                }
+            }
+            else
+            {
+                logger.LogInformation("Skipping legacy Group Address Config conversion. Specify file using -lgac option to have it converted.");
+            }
         }
         
         public void ConvertXmlToJson<TRootClass>(string xmlFileName, string jsonFileName) where TRootClass : class
