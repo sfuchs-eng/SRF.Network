@@ -87,6 +87,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             return Task.CompletedTask;
         }
 
+        [Obsolete]
         private bool PrepFileConversion(string inFileName, out string xmlFile, out string jsonFile)
         {
             logger.LogTrace("Trying to convert item template file '{inFileName}'", inFileName);
@@ -123,12 +124,6 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
         /// </summary>
         private void ConvertConfigurationXmlToJson()
         {
-            if (PrepFileConversion(Path.Combine(config.OpenHab.TemplatesFolder, "OpenHabItemTemplates.xml"), out string xmlFile, out string jsonFile))
-                ConvertXmlToJson<SRF.Knx.Config.OpenHab.MetaConfig.Items.ItemConfigTemplates>(xmlFile, jsonFile);
-
-            if (PrepFileConversion(Path.Combine(config.OpenHab.TemplatesFolder, "OpenHabChannelTemplates.xml"), out xmlFile, out jsonFile))
-                ConvertXmlToJson<SRF.Knx.Config.OpenHab.MetaConfig.Channels.ChannelConfigTemplates>(xmlFile, jsonFile);
-
             if (!string.IsNullOrWhiteSpace(cmd.LegacyGACFileName))
             {
                 if (!File.Exists(cmd.LegacyGACFileName))
@@ -146,7 +141,8 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogInformation("Skipping legacy Group Address Config conversion. Specify file using -lgac option to have it converted.");
             }
         }
-        
+
+        [Obsolete]
         public void ConvertXmlToJson<TRootClass>(string xmlFileName, string jsonFileName) where TRootClass : class
         {
             var xmlFile = new FileInfo(xmlFileName);
