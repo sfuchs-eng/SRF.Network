@@ -65,14 +65,23 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
                 logger.LogWarning("Using deserialization-update-serialization instead of JsonNode based delta updating of files. Implementation of delta-updating pending.");
                 var dc = df.GetDomainConfig();
-                var ohc = of.GetKnxOpenHabConfig(dc);
+                KnxOpenHabConfig ohc;
+                try
+                {
+                    ohc = of.GetKnxOpenHabConfig(dc);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error loading existing OpenHAB KNX configuration file. Starting with fresh configuration.");
+                    ohc = new();
+                }
                 var updates = of.IdentifyConfigurationUpdates(dc, ohc);
                 of.ApplyConfigurationUpdates(updates, ohc);
                 of.SaveMetaConfig(ohc);
-                cmd.JsonOutput(updates);
+                //cmd.JsonOutput(updates);
 
-                if ( !cmd.UpdateOpenHabConfigMetaOnly )
-                    df.GenerateUpdatedOpenHabConfig();
+                //if ( !cmd.UpdateOpenHabConfigMetaOnly )
+                //    df.GenerateUpdatedOpenHabConfig();
             }
             else
             {
