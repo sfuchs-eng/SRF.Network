@@ -15,6 +15,12 @@ namespace SRF.Network.Cli.Commands;
 [CliCommand(Name = "knx-configuration", Alias = "kc", Description = "Displays the KNX configuration.", Parent = typeof(Root))]
 public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Worker>
 {
+    [CliOption(Alias = "n", Description = "Create new domain configuration from ETS project group address export.")]
+    public bool CreateDomainConfigFromEtsExport { get; set; } = false;
+
+    [CliOption(Alias = "d", Description = "Update current domain configuration from ETS project group address export.")]
+    public bool UpdateDomainConfigFromEtsExport { get; set; } = false;
+
     [CliOption(Alias = "x", Description = "Convert legacy XML configuration to JSON files.")]
     public bool ConvertXmlToJson { get; set; } = false;
 
@@ -58,7 +64,19 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             {
                 ConvertConfigurationXmlToJson();
             }
-            else if ( cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly )
+            else if (cmd.CreateDomainConfigFromEtsExport)
+            {
+                CreateNewDomainConfigFromEtsExport();
+            }
+            else if (cmd.UpdateDomainConfigFromEtsExport)
+            {
+                var dc = knxConfigFactory.GetDomainConfig();
+                knxConfigFactory.SaveDomainConfig(dc);
+                logger.LogInformation("Updated domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
+                    config.EtsGAExportFile,
+                    config.KnxDomainConfigFile);
+            }
+            else if (cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
             {
                 var df = serviceProvider.GetRequiredService<IKnxConfigFactory>();
                 var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
@@ -66,22 +84,28 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogWarning("Using deserialization-update-serialization instead of JsonNode based delta updating of files. Implementation of delta-updating pending.");
                 var dc = df.GetDomainConfig();
                 KnxOpenHabConfig ohc;
+                bool configSuccess = false;
                 try
                 {
                     ohc = of.GetKnxOpenHabConfig(dc);
+                    configSuccess = true;
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Error loading existing OpenHAB KNX configuration file. Starting with fresh configuration.");
                     ohc = new();
                 }
-                var updates = of.IdentifyConfigurationUpdates(dc, ohc);
-                of.ApplyConfigurationUpdates(updates, ohc);
-                of.SaveMetaConfig(ohc);
-                //cmd.JsonOutput(updates);
 
-                //if ( !cmd.UpdateOpenHabConfigMetaOnly )
-                //    df.GenerateUpdatedOpenHabConfig();
+                if (configSuccess)
+                {
+                    var updates = of.IdentifyConfigurationUpdates(dc, ohc);
+                    of.ApplyConfigurationUpdates(updates, ohc);
+                    of.SaveMetaConfig(ohc);
+                }
+                else
+                {
+                    logger.LogWarning("Skipping update of OpenHAB KNX configuration due to errors loading/creating the configuration.");
+                }
             }
             else
             {
@@ -94,6 +118,15 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             }
             applicationLifetime.StopApplication();
             return Task.CompletedTask;
+        }
+
+        private void CreateNewDomainConfigFromEtsExport()
+        {
+            var dc = knxConfigFactory.CreateDomainConfigFromEtsExport();
+            knxConfigFactory.SaveDomainConfig(dc);
+            logger.LogInformation("Created new domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
+                config.EtsGAExportFile,
+                config.KnxDomainConfigFile);
         }
 
         [Obsolete]
@@ -143,6 +176,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                     knxConfigFactory.SaveDomainConfig(domainConfig);
                     var ohf = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
                     ohf.SaveMetaConfig(openHabConfig);
+                    logger.LogInformation("Converted legacy Group Address Config '{lgac}' to JSON configuration file.", cmd.LegacyGACFileName);
                 }
             }
             else
