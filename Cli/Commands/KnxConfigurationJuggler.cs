@@ -60,12 +60,18 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             if (!string.IsNullOrEmpty(cmd.LegacyGACFileName))
             {
                 ImportLegacyGAC();
-            }         
-            else if (cmd.CreateDomainConfigFromEtsExport)
+                applicationLifetime.StopApplication();
+                return Task.CompletedTask;
+            }
+
+            if (cmd.CreateDomainConfigFromEtsExport)
             {
                 CreateNewDomainConfigFromEtsExport();
+                applicationLifetime.StopApplication();
+                return Task.CompletedTask;
             }
-            else if (cmd.UpdateDomainConfigFromEtsExport)
+
+            if (cmd.UpdateDomainConfigFromEtsExport)
             {
                 var dc = knxConfigFactory.GetDomainConfig();
                 knxConfigFactory.SaveDomainConfig(dc);
@@ -73,7 +79,8 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
             }
-            else if (cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
+
+            if (cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
             {
                 var df = serviceProvider.GetRequiredService<IKnxConfigFactory>();
                 var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
@@ -103,16 +110,18 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 {
                     logger.LogWarning("Skipping update of OpenHAB KNX configuration due to errors loading/creating the configuration.");
                 }
+
+                applicationLifetime.StopApplication();
+                return Task.CompletedTask;
             }
-            else
-            {
-                logger.LogInformation("KNX Configuration:");
-                Console.WriteLine(
-                    System.Text.Json.JsonSerializer.Serialize(
-                        config,
-                        KnxConfigFactory.DefaultJsonOptions
-                    ));
-            }
+
+            logger.LogInformation("KNX Configuration:");
+            Console.WriteLine(
+                System.Text.Json.JsonSerializer.Serialize(
+                    config,
+                    KnxConfigFactory.DefaultJsonOptions
+                ));
+
             applicationLifetime.StopApplication();
             return Task.CompletedTask;
         }
