@@ -7,8 +7,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using SRF.Knx.Config;
 using SRF.Knx.Config.Domain;
-using SRF.Knx.Config.OpenHab.MetaConfig;
 using SRF.Knx.Config.OpenHab;
+using SRF.Knx.Config.OpenHab.BaseConfig;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -21,10 +21,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "d", Description = "Update current domain configuration from ETS project group address export.")]
     public bool UpdateDomainConfigFromEtsExport { get; set; } = false;
 
-    [CliOption(Alias = "x", Description = "Convert legacy XML configuration to JSON files.")]
-    public bool ConvertXmlToJson { get; set; } = false;
-
-    [CliOption(Alias = "lgac", Required = false, Name = "legacy-gac-file", Description = "Full file name of legacy group address configuration file. Use in combination with -x")]
+    [CliOption(Alias = "lgac", Required = false, Name = "import-legacy-gac", Description = "Load domain config and override each existing GA with legacy group address config XML file's settings for that GA.")]
     public string? LegacyGACFileName { get; set; }
 
     [CliOption(Alias = "f", Description = "Force overwriting existing files during conversion.")]
@@ -60,10 +57,10 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            if (cmd.ConvertXmlToJson)
+            if (!string.IsNullOrEmpty(cmd.LegacyGACFileName))
             {
-                ConvertConfigurationXmlToJson();
-            }
+                ImportLegacyGAC();
+            }         
             else if (cmd.CreateDomainConfigFromEtsExport)
             {
                 CreateNewDomainConfigFromEtsExport();
@@ -100,7 +97,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 {
                     var updates = of.IdentifyConfigurationUpdates(dc, ohc);
                     of.ApplyConfigurationUpdates(updates, ohc);
-                    of.SaveMetaConfig(ohc);
+                    of.SaveBaseConfig(ohc);
                 }
                 else
                 {
@@ -129,94 +126,20 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 config.KnxDomainConfigFile);
         }
 
-        [Obsolete]
-        private bool PrepFileConversion(string inFileName, out string xmlFile, out string jsonFile)
-        {
-            logger.LogTrace("Trying to convert item template file '{inFileName}'", inFileName);
-
-            if (Path.GetExtension(inFileName).Equals(".xml", StringComparison.OrdinalIgnoreCase))
-            {
-                logger.LogTrace("Input file '{inFileName}' has .xml extension.", inFileName);
-                xmlFile = inFileName;
-                jsonFile = Path.ChangeExtension(xmlFile, ".json");
-            }
-            else
-            {
-                logger.LogTrace("Input file '{inFileName}' does not have .xml extension, assuming source-target swap", inFileName);
-                xmlFile = Path.ChangeExtension(inFileName, ".xml");
-                jsonFile = inFileName;
-            }
-
-            if (!File.Exists(xmlFile))
-            {
-                logger.LogError("Input XML file '{xmlFile}' does not exist.", xmlFile);
-                return false;
-            }
-            if (File.Exists(jsonFile) && !cmd.ForceOverwrite)
-            {
-                logger.LogWarning("Output JSON file '{jsonFile}' already exists. Skipping conversion. Use -f to force overwrite.", jsonFile);
-                return false;
-            }
-
-            return true;
-        }
-
         /// <summary>
-        /// Convert legacy XML configuration files to JSON format.
+        /// Import legacy GAC XML configuration and convert to JSON domain and OpenHAB base configuration files.
         /// </summary>
-        private void ConvertConfigurationXmlToJson()
+        private void ImportLegacyGAC()
         {
-            if (!string.IsNullOrWhiteSpace(cmd.LegacyGACFileName))
-            {
-                if (!File.Exists(cmd.LegacyGACFileName))
-                    logger.LogWarning("Legacy GAC '{}' doesn't exist.", cmd.LegacyGACFileName);
-                else
-                {
-                    knxConfigFactory.CreateConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
-                    knxConfigFactory.SaveDomainConfig(domainConfig);
-                    var ohf = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
-                    ohf.SaveMetaConfig(openHabConfig);
-                    logger.LogInformation("Converted legacy Group Address Config '{lgac}' to JSON configuration file.", cmd.LegacyGACFileName);
-                }
-            }
+            if (!File.Exists(cmd.LegacyGACFileName))
+                logger.LogWarning("Legacy GAC '{}' doesn't exist.", cmd.LegacyGACFileName);
             else
             {
-                logger.LogInformation("Skipping legacy Group Address Config conversion. Specify file using -lgac option to have it converted.");
-            }
-        }
-
-        [Obsolete]
-        public void ConvertXmlToJson<TRootClass>(string xmlFileName, string jsonFileName) where TRootClass : class
-        {
-            var xmlFile = new FileInfo(xmlFileName);
-            if (!xmlFile.Exists)
-            {
-                logger.LogWarning("The input file '{fileName}' does not exist.", xmlFile.FullName);
-                return;
-            }
-
-            try
-            {
-                XmlSerializer serializer = new(typeof(TRootClass));
-                using var stream = xmlFile.OpenRead();
-                var templates = (TRootClass?)serializer.Deserialize(stream)
-                    ?? throw new InvalidDataException($"Could not deserialize {nameof(TRootClass)} from '{xmlFile.FullName}'");
-
-                var jsonFile = new FileInfo(jsonFileName);
-                var jsonOptions = new JsonSerializerOptions()
-                {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
-                };
-                using var outstream = jsonFile.OpenWrite();
-                JsonSerializer.Serialize(outstream, templates, jsonOptions);
-                outstream.Flush();
-                outstream.Close();
-                logger.LogInformation("Converted XML file '{xmlFile}' to JSON file '{jsonFile}'", xmlFile.FullName, jsonFile.FullName);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error converting XML file '{xmlFile}' to JSON", xmlFile.FullName);
+                knxConfigFactory.OverrideConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
+                knxConfigFactory.SaveDomainConfig(domainConfig);
+                var ohf = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
+                ohf.SaveBaseConfig(openHabConfig);
+                logger.LogInformation("Converted legacy Group Address Config '{lgac}' to JSON configuration file.", cmd.LegacyGACFileName);
             }
         }
     }
