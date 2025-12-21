@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Xml.Serialization;
 using DotMake.CommandLine;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,7 +5,6 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using SRF.Knx.Config;
 using SRF.Knx.Config.Domain;
-using SRF.Knx.Config.OpenHab;
 using SRF.Knx.Config.OpenHab.BaseConfig;
 
 namespace SRF.Network.Cli.Commands;
@@ -66,12 +63,15 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
             if (cmd.CreateDomainConfigFromEtsExport)
             {
-                CreateNewDomainConfigFromEtsExport();
+                knxConfigFactory.CreateDomainConfigFromEtsExport();
+                logger.LogInformation("Created new domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
+                    config.EtsGAExportFile,
+                    config.KnxDomainConfigFile);
                 applicationLifetime.StopApplication();
                 return Task.CompletedTask;
             }
 
-            if (cmd.UpdateDomainConfigFromEtsExport)
+            if (cmd.UpdateDomainConfigFromEtsExport || cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
             {
                 var dc = knxConfigFactory.GetDomainConfig();
                 knxConfigFactory.SaveDomainConfig(dc);
@@ -82,7 +82,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
             if (cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
             {
-                var df = serviceProvider.GetRequiredService<IKnxConfigFactory>();
+                var df = knxConfigFactory;
                 var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
 
                 logger.LogWarning("Using deserialization-update-serialization instead of JsonNode based delta updating of files. Implementation of delta-updating pending.");
@@ -126,15 +126,6 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             return Task.CompletedTask;
         }
 
-        private void CreateNewDomainConfigFromEtsExport()
-        {
-            var dc = knxConfigFactory.CreateDomainConfigFromEtsExport();
-            knxConfigFactory.SaveDomainConfig(dc);
-            logger.LogInformation("Created new domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
-                config.EtsGAExportFile,
-                config.KnxDomainConfigFile);
-        }
-
         /// <summary>
         /// Import legacy GAC XML configuration and convert to JSON domain and OpenHAB base configuration files.
         /// </summary>
@@ -145,9 +136,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             else
             {
                 knxConfigFactory.OverrideConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
-                knxConfigFactory.SaveDomainConfig(domainConfig);
-                var ohf = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
-                ohf.SaveBaseConfig(openHabConfig);
+                // both are already safed.
                 logger.LogInformation("Converted legacy Group Address Config '{lgac}' to JSON configuration file.", cmd.LegacyGACFileName);
             }
         }
