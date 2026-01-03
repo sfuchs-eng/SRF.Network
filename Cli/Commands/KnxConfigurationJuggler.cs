@@ -91,6 +91,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 bool configSuccess = false;
                 try
                 {
+                    logger.LogTrace("Loading existing OpenHAB KNX configuration file.");
                     ohc = of.GetKnxOpenHabConfig(dc);
                     configSuccess = true;
                 }
@@ -102,6 +103,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
                 if (configSuccess)
                 {
+                    logger.LogTrace("Identifying and applying configuration updates to OpenHAB KNX configuration.");
                     var updates = of.IdentifyConfigurationUpdates(dc, ohc);
                     of.ApplyConfigurationUpdates(updates, ohc);
                     of.SaveBaseConfig(ohc);
@@ -109,6 +111,11 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 else
                 {
                     logger.LogWarning("Skipping update of OpenHAB KNX configuration due to errors loading/creating the configuration.");
+                }
+
+                if ( cmd.UdpateOpenHabConfig )
+                {
+                    of.WriteOHConfigFiles(ohc);
                 }
 
                 applicationLifetime.StopApplication();
