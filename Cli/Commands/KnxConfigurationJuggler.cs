@@ -30,6 +30,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "om", Description = "Update OpenHAB meta-configuration only, do not create new OpenHAB config files.")]
     public bool UpdateOpenHabConfigMetaOnly { get; set; } = false;
 
+    [CliOption(Alias = "rf", Description = "Remove Fresh flag from all EntryStatus properties in domain and OpenHAB configurations.")]
+    public bool RemoveFreshFlag { get; set; } = false;
+
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
         base.AddServices(services, cliContext);
@@ -54,6 +57,13 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            if (cmd.RemoveFreshFlag)
+            {
+                RemoveFreshFlagFromConfigurations();
+                applicationLifetime.StopApplication();
+                return Task.CompletedTask;
+            }
+
             if (!string.IsNullOrEmpty(cmd.LegacyGACFileName))
             {
                 ImportLegacyGAC();
@@ -132,6 +142,52 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
             applicationLifetime.StopApplication();
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Remove Fresh flag from all EntryStatus properties in domain and OpenHAB configurations.
+        /// </summary>
+        private void RemoveFreshFlagFromConfigurations()
+        {
+            try
+            {
+                // Remove Fresh flag from domain configuration
+                var domainConfig = knxConfigFactory.GetDomainConfig();
+                int domainGACount = 0;
+                foreach (var ga in domainConfig.Extra.GetAllExtraConfigs() )
+                {
+                    if (ga.EntryStatus.HasFlag(ExtraConfigStatus.Fresh))
+                    {
+                        ga.EntryStatus &= ~ExtraConfigStatus.Fresh;
+                        domainGACount++;
+                    }
+                }
+                knxConfigFactory.SaveDomainConfig(domainConfig);
+                logger.LogInformation("Removed Fresh flag from {count} group addresses in domain configuration.", domainGACount);
+
+                // Remove Fresh flag from OpenHAB configuration
+                var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
+                var ohConfig = of.GetKnxOpenHabConfig(domainConfig);
+                int ohGACount = 0;
+                foreach (var thing in ohConfig.Things)
+                {
+                    foreach (var ga in thing.GroupAddresses)
+                    {
+                        if (ga.EntryStatus.HasFlag(ExtraConfigStatus.Fresh))
+                        {
+                            ga.EntryStatus &= ~ExtraConfigStatus.Fresh;
+                            ohGACount++;
+                        }
+                    }
+                }
+                of.SaveBaseConfig(ohConfig);
+                logger.LogInformation("Removed Fresh flag from {count} group addresses in OpenHAB configuration.", ohGACount);
+                logger.LogInformation("Successfully removed Fresh flag from configurations.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error while removing Fresh flag from configurations.");
+            }
         }
 
         /// <summary>
