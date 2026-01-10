@@ -15,7 +15,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "n", Description = "Create new domain configuration from ETS project group address export.")]
     public bool CreateDomainConfigFromEtsExport { get; set; } = false;
 
-    [CliOption(Alias = "d", Description = "Update current domain configuration from ETS project group address export.")]
+    [CliOption(Alias = "u", Description = "Update current domain configuration from ETS project group address export.")]
     public bool UpdateDomainConfigFromEtsExport { get; set; } = false;
 
     [CliOption(Alias = "lgac", Required = false, Name = "import-legacy-gac", Description = "Load domain config and override each existing GA with legacy group address config XML file's settings for that GA.")]
@@ -63,7 +63,8 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
             if (cmd.CreateDomainConfigFromEtsExport)
             {
-                knxConfigFactory.CreateDomainConfigFromEtsExport();
+                var domainConfig = knxConfigFactory.CreateDomainConfigFromEtsExport();
+                knxConfigFactory.SaveDomainConfig(domainConfig);
                 logger.LogInformation("Created new domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
