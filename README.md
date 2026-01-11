@@ -24,8 +24,10 @@ Client (Json)WebSocket related wrappers and helpers designed to receive streams 
 ## In work
 
 - `Knx`  
-In development: Wrapper for the official KNX library [Knx.Falcon.Sdk](https://www.nuget.org/packages/Knx.Falcon.Sdk) and KNX project/installation oriented additional functionality serving the easy implementation of custom C# .NET logic in home automation scenarios.  
-For more about the KNX Falcon SDK: [Falcon.SDK 6, Get started page on knx.org](https://support.knx.org/hc/en-us/sections/4410811049618-Get-Started)
+  - In development: Wrapper for the official KNX library [Knx.Falcon.Sdk](https://www.nuget.org/packages/Knx.Falcon.Sdk) and KNX project/installation oriented additional
+  functionality serving the easy implementation of custom C# .NET logic in home automation scenarios.  
+  For more about the KNX Falcon SDK: [Falcon.SDK 6, Get started page on knx.org](https://support.knx.org/hc/en-us/sections/4410811049618-Get-Started)
+  - Configuration handling from ETS to C# / .NET / Falcon.SDK is supported by `SRF.Knx.Config` (publication pending)
 
 ## Planned, time-line open
 
