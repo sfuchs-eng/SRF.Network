@@ -20,6 +20,9 @@ public class Knx : HostLauncher<Knx.Worker>
     [CliOption(Alias = "l", Description = "Listen for incoming messages and log them to the console.")]
     public bool Listen { get; set; } = false;
 
+    [CliOption(Alias = "f", Description = "Filter group addresses for listening (comma-separated list of 3-level addresses in format 3/4/5). If not provided, all messages are logged.")]
+    public string? GroupAddressFilter { get; set; }
+
     [CliOption(Description = "Load domain configuration and display...")]
     public bool Configuration { get; set; } = false;
 
@@ -45,6 +48,7 @@ public class Knx : HostLauncher<Knx.Worker>
         private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
         private readonly IServiceProvider serviceProvider = serviceProvider;
         private readonly ILogger<Worker> logger = logger;
+        private HashSet<string>? allowedGroupAddresses = null;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -70,6 +74,21 @@ public class Knx : HostLauncher<Knx.Worker>
 
             if (cmd.Listen)
             {
+                // Parse the group address filter if provided
+                if (!string.IsNullOrWhiteSpace(cmd.GroupAddressFilter))
+                {
+                    allowedGroupAddresses = new HashSet<string>(
+                        cmd.GroupAddressFilter.Split(',')
+                            .Select(addr => addr.Trim())
+                            .Where(addr => !string.IsNullOrWhiteSpace(addr))
+                    );
+                    Console.WriteLine($"Listening to group addresses: {string.Join(", ", allowedGroupAddresses)}");
+                }
+                else
+                {
+                    Console.WriteLine("Listening to all group addresses...");
+                }
+
                 knxConnection.Connect();
                 knxConnection.MessageReceived += KnxMessageReceivedHandler;
                 while (!stoppingToken.IsCancellationRequested)
@@ -107,6 +126,16 @@ public class Knx : HostLauncher<Knx.Worker>
         {
             var tgtAddr = e.KnxMessageContext.GroupEventArgs?.DestinationAddress.ToString(); //.Address.To3LGroupAddress();
             var srcAddr = e.KnxMessageContext.GroupEventArgs?.SourceAddress.ToString(); //.FullAddress.To3LIndividualAddress();
+            
+            // If a filter is set, check if the destination address matches
+            if (allowedGroupAddresses != null)
+            {
+                if (tgtAddr == null || !allowedGroupAddresses.Contains(tgtAddr))
+                {
+                    return;
+                }
+            }
+            
             var payload = string.Join(',', e.KnxMessageContext.GroupEventArgs?.Value.Value.Select(b => $"0x{b.ToString("X2")}") ?? ["no payload"]);
             Console.WriteLine($"- from {srcAddr} to {tgtAddr}: {payload}");
         }
