@@ -1,11 +1,13 @@
+using System.Runtime.CompilerServices;
+
 namespace SRF.Network.Knx;
 
 public interface IKnxConnection
 {
     event EventHandler<KnxConnectionEventArgs> ConnectionStatusChanged;
     event EventHandler<KnxMessageReceivedEventArgs> MessageReceived;
-    void Connect();
-    void Disconnect();
-    void SendMessage(IKnxMessage message);
+    Task ConnectAsync();
+    Task DisconnectAsync();
+    Task SendMessageAsync(IKnxMessage message, CancellationToken token);
     bool IsConnected { get; }
 }

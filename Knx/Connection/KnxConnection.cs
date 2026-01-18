@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Knx.Falcon;
 using Knx.Falcon.DataSecurity;
 using Knx.Falcon.Discovery;
@@ -59,29 +60,41 @@ public class KnxConnection : IKnxConnection
         return discovery.DiscoverAsync(token ?? new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token);
     }
 
-    public void Connect()
+    public async Task ConnectAsync()
     {
         if (!IsConnected)
         {
-            knxBus.Connect();
-            knxBus.GroupMessageReceived += OnGroupMessageReceived;
+            await knxBus.ConnectAsync();
+            if (knxBus.ConnectionState == BusConnectionState.Connected)
+            {
+                logger.LogInformation("KNX bus connected with type {connectorType}", knxBus.ConnectorType);
+                logger.LogDebug("KNX connection config: {interfaceConfig}",
+                    JsonSerializer.Serialize(knxBus.InterfaceConfiguration, knxBus.InterfaceConfiguration.GetType()));
+                logger.LogDebug("KNX connection features: {interfaceFeatures}",
+                    JsonSerializer.Serialize(knxBus.InterfaceFeatures, knxBus.InterfaceFeatures.GetType()));
+                knxBus.GroupMessageReceived += OnGroupMessageReceived;
             //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
+            }
+            else
+                logger.LogError("KNX bus connection failed, left in status {connectionStatus}", knxBus.ConnectionState);
         }
     }
 
-    public void Disconnect()
+    public async Task DisconnectAsync()
     {
         knxBus.GroupMessageReceived -= OnGroupMessageReceived;
+        await Task.CompletedTask;
         //knxBus.IoTGroupMessageReceived -= OnIoTGroupMessageReceived;
     }
 
-    public void SendMessage(IKnxMessage message)
+    public async Task SendMessageAsync(IKnxMessage message, CancellationToken token)
     {
         throw new NotImplementedException();
     }
 
     protected virtual void OnConnectionStatusChanged(EventArgs e)
     {
+        logger.LogTrace("Knx connection status changed to {connStatus}", knxBus.ConnectionState);
         ConnectionStatusChanged?.Invoke(this, new KnxConnectionEventArgs
         {
         });
