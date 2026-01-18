@@ -30,8 +30,11 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "om", Description = "Update OpenHAB meta-configuration only, do not create new OpenHAB config files.")]
     public bool UpdateOpenHabConfigMetaOnly { get; set; } = false;
 
-    [CliOption(Alias = "rf", Description = "Remove Fresh flag from all EntryStatus properties in domain and OpenHAB configurations.")]
+    [CliOption(Alias = "rf", Description = "Remove Fresh and Changed flags from all EntryStatus properties in domain and OpenHAB configurations.")]
     public bool RemoveFreshFlag { get; set; } = false;
+
+    [CliOption(Alias = "fc", Name = "fix-channels", Description = "Batch fix Channel entries for all Group Addresses with ChannelType 'Default' or no DPT set.")]
+    public bool BatchCreateChannels { get; set; } = false;
 
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
@@ -60,6 +63,13 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             if (cmd.RemoveFreshFlag)
             {
                 RemoveFreshFlagFromConfigurations();
+                applicationLifetime.StopApplication();
+                return Task.CompletedTask;
+            }
+
+            if (cmd.BatchCreateChannels)
+            {
+                BatchCreateChannelEntries();
                 applicationLifetime.StopApplication();
                 return Task.CompletedTask;
             }
@@ -145,7 +155,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
         }
 
         /// <summary>
-        /// Remove Fresh flag from all EntryStatus properties in domain and OpenHAB configurations.
+        /// Remove Fresh and Changed flags from all EntryStatus properties in domain and OpenHAB configurations.
         /// </summary>
         private void RemoveFreshFlagFromConfigurations()
         {
@@ -156,9 +166,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 int domainGACount = 0;
                 foreach (var ga in domainConfig.Extra.GetAllExtraConfigs() )
                 {
-                    if (ga.EntryStatus.HasFlag(ExtraConfigStatus.Fresh))
+                    if (ga.EntryStatus.HasFlag(ExtraConfigStatus.Fresh) || ga.EntryStatus.HasFlag(ExtraConfigStatus.Changed))
                     {
-                        ga.EntryStatus &= ~ExtraConfigStatus.Fresh;
+                        ga.EntryStatus &= ~(ExtraConfigStatus.Fresh | ExtraConfigStatus.Changed);
                         domainGACount++;
                     }
                 }
@@ -173,9 +183,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 {
                     foreach (var ga in thing.GroupAddresses)
                     {
-                        if (ga.EntryStatus.HasFlag(ExtraConfigStatus.Fresh))
+                        if (ga.EntryStatus.HasFlag(ExtraConfigStatus.Fresh) || ga.EntryStatus.HasFlag(ExtraConfigStatus.Changed))
                         {
-                            ga.EntryStatus &= ~ExtraConfigStatus.Fresh;
+                            ga.EntryStatus &= ~(ExtraConfigStatus.Fresh | ExtraConfigStatus.Changed);
                             ohGACount++;
                         }
                     }
@@ -202,6 +212,112 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 knxConfigFactory.OverrideConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
                 // both are already safed.
                 logger.LogInformation("Converted legacy Group Address Config '{lgac}' to JSON configuration file.", cmd.LegacyGACFileName);
+            }
+        }
+
+        /// <summary>
+        /// Batch create Channel entries for all Group Addresses with ChannelType 'Default' or no DPT set.
+        /// Uses existing templating and lookup mechanisms based on ETS data (Label and DPT).
+        /// </summary>
+        private void BatchCreateChannelEntries()
+        {
+            try
+            {
+                // Load the domain and OpenHAB configurations
+                var dc = knxConfigFactory.GetDomainConfig();
+                var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
+                
+                KnxOpenHabConfig ohc;
+                bool configSuccess = false;
+                try
+                {
+                    logger.LogTrace("Loading existing OpenHAB KNX configuration file.");
+                    ohc = of.GetKnxOpenHabConfig(dc);
+                    configSuccess = true;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error loading existing OpenHAB KNX configuration file. Starting with fresh configuration.");
+                    ohc = new();
+                }
+
+                if (!configSuccess)
+                {
+                    logger.LogError("Cannot batch create channels due to errors loading OpenHAB KNX configuration.");
+                    return;
+                }
+
+                int channelsChanged = 0;
+                int channelsProcessed = 0;
+
+                // Iterate through all Things and their Group Addresses
+                foreach (var thing in ohc.Things)
+                {
+                    foreach (var ga in thing.GroupAddresses)
+                    {
+                        channelsProcessed++;
+
+                        // Check if Channel has ChannelType.Default or no DPT set
+                        bool isChannelDefault = ga.Channel.Type == SRF.Knx.Config.OpenHab.Generate.ChannelType.Default;
+                        bool hasDptIssue = ga.Channel.DPT == null || !ga.Channel.DPT.IsValidType;
+
+                        if (!(isChannelDefault || hasDptIssue))
+                            continue;
+
+                        logger.LogDebug("Processing GA {ga} '{gaLabel}' with ChannelType={channelType}, HasValidDPT={hasDpt}",
+                            ga.Address3L, ga.Name, ga.Channel.Type, ga.Channel.DPT?.IsValidType ?? false);
+
+                        if ( !dc.GroupAddresses.TryGetValue(ga.Address.Address, out var etsGac))
+                        {
+                            logger.LogWarning("GA {ga} from OpenHAB config not found in domain configuration.", ga.Address3L);
+                            continue;
+                        }
+
+                        // Get the extra configuration which may have domain-level settings
+                        if (!dc.Extra.TryGetGAExtraConfig(ga.Address, out var extraConfig))
+                        {
+                            logger.LogWarning("Extra config for GA {ga} not found.", ga.Address3L);
+                            continue;
+                        }
+
+                        // Recreate the OpenHAB GA config using the factory, which applies templating
+                        var recreatedOhGa = of.CreateOpenHabGAC(etsGac.Address, dc);
+
+                        // If the template provided a valid channel config, update the GA
+                        if (recreatedOhGa.Channel.Type != SRF.Knx.Config.OpenHab.Generate.ChannelType.Default &&
+                            recreatedOhGa.Channel.Type != SRF.Knx.Config.OpenHab.Generate.ChannelType.NotSupported)
+                        {
+                            ga.Channel.DPT = etsGac.DPT;
+                            ga.Channel.Type = recreatedOhGa.Channel.Type;
+                            ga.EntryStatus |= ExtraConfigStatus.Changed;
+
+                            // Update other channel properties as needed
+                            if (string.IsNullOrEmpty(ga.Channel.Name))
+                            {
+                                ga.Channel.Name = recreatedOhGa.Channel.Name;
+                            }
+
+                            logger.LogInformation("Updated GA {gaAddress} '{gaLabel}': ChannelType={channelType}, DPT={dpt}",
+                                ga.Address3L, ga.Name, ga.Channel.Type, ga.Channel.DPT?.DotFormat ?? "undefined");
+                            channelsChanged++;
+                        }
+                        else
+                        {
+                            logger.LogWarning("No valid channel template found for GA {gaAddress} '{gaLabel}'",
+                                ga.Address3L, ga.Name);
+                        }
+                    }
+                }
+
+                // Save the updated OpenHAB configuration
+                of.SaveBaseConfig(ohc);
+                
+                logger.LogInformation("Batch channel updates completed: {created} channels updated out of {processed} group addresses processed.",
+                    channelsChanged, channelsProcessed);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error during batch channel creation.");
             }
         }
     }
