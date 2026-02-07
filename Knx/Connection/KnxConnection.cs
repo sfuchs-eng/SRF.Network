@@ -83,7 +83,7 @@ public class KnxConnection : IKnxConnection
     protected virtual void OnConnectionStatusChanged(KnxConnectionEventArgs e)
     {
         logger.LogTrace("Knx connection status changed to {connStatus}", knxBus.ConnectionState);
-        ConnectionStatusChanged?.Invoke(this, new KnxConnectionEventArgs
+        ConnectionStateChanged?.Invoke(this, new KnxConnectionEventArgs
         {
         });
     }

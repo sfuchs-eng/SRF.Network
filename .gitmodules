@@ -1,7 +1,6 @@
 [submodule "Subs/SRF.Industrial"]
 	path = Subs/SRF.Industrial
 	url = https://github.com/sfuchs-eng/SRF.Industrial
-[submodule "Subs/SRF.Knx.Config"]
-	path = Subs/SRF.Knx.Config
-	url = sfuchs@asgard.fu:/data/git/SRF.Knx.Config.git
-	branch = ForFalconPath
+[submodule "Subs/SRF.Knx"]
+	path = Subs/SRF.Knx
+	url = git@github.com:sfuchs-eng/SRF.Knx.git

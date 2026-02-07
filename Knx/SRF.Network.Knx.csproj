@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.*" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,7 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Subs\SRF.Industrial\Events\SRF.Industrial.Events.csproj" />
     <ProjectReference Include="..\Misc\SRF.Network.Misc.csproj" />
-    <ProjectReference Include="..\Subs\SRF.Knx.Config\SRF.Knx.Config.csproj" />
+    <ProjectReference Include="..\Subs\SRF.Knx\SRF.Knx.Core\SRF.Knx.Core.csproj" />
+    <ProjectReference Include="..\Subs\SRF.Knx\SRF.Knx.Config\SRF.Knx.Config.csproj" />
   </ItemGroup>
 
 </Project>
