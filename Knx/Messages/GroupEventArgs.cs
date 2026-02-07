@@ -1,4 +1,4 @@
-using SRF.Network.Knx.Addressing;
+using SRF.Knx.Core;
 
 namespace SRF.Network.Knx.Messages;
 

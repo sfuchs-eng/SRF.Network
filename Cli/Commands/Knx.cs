@@ -1,17 +1,13 @@
-using System;
-using System.Text.Json;
 using DotMake.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SRF.Knx.Config.Domain;
+using SRF.Knx.Core;
+using SRF.Knx.Core.DPT;
 using SRF.Network.Knx;
 using SRF.Network.Knx.Connection;
-using Knx.Falcon.ApplicationData;
-using Knx.Falcon.ApplicationData.DatapointTypes;
-using Knx.Falcon;
-using Knx.Falcon.ApplicationData.PropertyDataTypes;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -44,6 +40,7 @@ public class Knx : HostLauncher<Knx.Worker>
         IKnxConnection knxConnection,
         IHostApplicationLifetime applicationLifetime,
         IServiceProvider serviceProvider,
+        IDptFactory dptFactory,
         ILogger<Knx.Worker> logger,
         DomainConfiguration domainConfiguration
     ) : BackgroundService
@@ -55,29 +52,31 @@ public class Knx : HostLauncher<Knx.Worker>
         private readonly ILogger<Worker> logger = logger;
         private readonly DomainConfiguration domainConfiguration = domainConfiguration;
         private HashSet<string>? allowedGroupAddresses = null;
-        private readonly DptFactory dptFactory = DptFactory.Default;
+        private readonly IDptFactory dptFactory = dptFactory;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             bool didSomething = false;
 
-            if (cmd.Scan)
-            {
-                Console.WriteLine("Scanning for KNX Net/IP devices...");
-                await foreach (var ep in KnxConnection.DiscoverKnxIpDevicesAsync(stoppingToken))
-                {
-                    Console.WriteLine("- {0}: {1}, {2}, {3}, {4}",
-                            ep.FriendlyName,
-                            ep.LocalIPAddress,
-                            ep.MediumType.ToString(),
-                            ep.MediumStatus,
-                            ep.NetworkAdapterInfo.Name
-                        );
-                }
-                Console.WriteLine("Scan completed.");
-                applicationLifetime.StopApplication();
-                return;
-            }
+            /*
+                        if (cmd.Scan)
+                        {
+                            Console.WriteLine("Scanning for KNX Net/IP devices...");
+                            await foreach (var ep in KnxConnection.DiscoverKnxIpDevicesAsync(stoppingToken))
+                            {
+                                Console.WriteLine("- {0}: {1}, {2}, {3}, {4}",
+                                        ep.FriendlyName,
+                                        ep.LocalIPAddress,
+                                        ep.MediumType.ToString(),
+                                        ep.MediumStatus,
+                                        ep.NetworkAdapterInfo.Name
+                                    );
+                            }
+                            Console.WriteLine("Scan completed.");
+                            applicationLifetime.StopApplication();
+                            return;
+                        }
+            */
 
             if (cmd.Listen)
             {
@@ -147,7 +146,7 @@ public class Knx : HostLauncher<Knx.Worker>
             if (groupValue == null)
                 return;
 
-            var payloadStr = FormatPayload(e.KnxMessageContext.GroupEventArgs?.DestinationAddress, groupValue, srcAddr);
+            var payloadStr = FormatPayload(e.KnxMessageContext.GroupEventArgs?.DestinationAddress.Address, groupValue, srcAddr);
             
             Console.WriteLine($"- from {srcAddr} to {tgtAddr}: {payloadStr}");
         }

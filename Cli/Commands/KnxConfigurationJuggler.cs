@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SRF.Knx.Config;
 using SRF.Knx.Config.Domain;
 using SRF.Knx.Config.OpenHab.BaseConfig;
+using SRF.Knx.Config.OpenHab;
 
 namespace SRF.Network.Cli.Commands;
 

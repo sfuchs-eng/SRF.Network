@@ -26,4 +26,8 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Subs\SRF.Knx\SRF.Knx.Config.OpenHab\SRF.Knx.Config.OpenHab.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -4,7 +4,7 @@ namespace SRF.Network.Knx;
 
 public interface IKnxConnection
 {
-    event EventHandler<KnxConnectionEventArgs> ConnectionStatusChanged;
+    event EventHandler<KnxConnectionEventArgs>? ConnectionStatusChanged;
     event EventHandler<KnxMessageReceivedEventArgs> MessageReceived;
     Task ConnectAsync();
     Task DisconnectAsync();

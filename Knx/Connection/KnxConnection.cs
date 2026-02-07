@@ -15,9 +15,8 @@ public class KnxConnection : IKnxConnection
 
     public bool IsConnected { get => knxBus.IsConnected; }
 
-    public event EventHandler<KnxConnectionEventArgs>? ConnectionStateChanged;
-
     public event EventHandler<KnxMessageReceivedEventArgs>? MessageReceived;
+    public event EventHandler<Knx.KnxConnectionEventArgs>? ConnectionStatusChanged;
 
     public KnxConnection(
         IKnxLibraryInitialization knxLibInitializer, // must be constructed before any other Knx.Falcon class is instanciated.
@@ -80,10 +79,10 @@ public class KnxConnection : IKnxConnection
         throw new NotImplementedException();
     }
 
-    protected virtual void OnConnectionStatusChanged(KnxConnectionEventArgs e)
+    protected virtual void OnConnectionStatusChanged(Knx.KnxConnectionEventArgs e)
     {
         logger.LogTrace("Knx connection status changed to {connStatus}", knxBus.ConnectionState);
-        ConnectionStateChanged?.Invoke(this, new KnxConnectionEventArgs
+        ConnectionStatusChanged?.Invoke(this, new Knx.KnxConnectionEventArgs
         {
         });
     }
@@ -92,18 +91,21 @@ public class KnxConnection : IKnxConnection
     {
         try
         {
-            MessageReceived?.Invoke(this, new KnxMessageReceivedEventArgs(e));
+            var ctx = new KnxMessageContext(e);
+            MessageReceived?.Invoke(this, new KnxMessageReceivedEventArgs(ctx));
         }
-        catch ( Exception ex )
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to process KNX Group Message: {groupAddress} from {sourceAddress}",
-                e.DestinationAddress.Address.To3LGroupAddress(),
-                e.SourceAddress.FullAddress.To3LIndividualAddress());
+                e.DestinationAddress.ToString(),
+                e.SourceAddress.ToString());
         }
     }
 
+/*
     private void OnIoTGroupMessageReceived(object? sender, IoTGroupEventArgs e)
     {
         logger.LogWarning("{methodName} for handling IoT group messages is not implemented yet.", nameof(OnIoTGroupMessageReceived));
     }
+    */
 }

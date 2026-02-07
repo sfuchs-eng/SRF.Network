@@ -1,4 +1,4 @@
-using Knx.Falcon;
+using SRF.Network.Knx.Messages;
 
 namespace SRF.Network.Knx;
 
