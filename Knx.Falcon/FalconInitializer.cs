@@ -1,10 +1,6 @@
-using Knx.Falcon.Logging;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using KNX = Knx.Falcon;
-using SRF.Knx.Config;
 
-namespace SRF.Network.Knx.FalconSupport;
+namespace SRF.Network.Knx.Falcon;
 
 /// <summary>
 /// Initializations of the Falcon SDK that need to be completed prior instanciation of any Falcon SDK class.

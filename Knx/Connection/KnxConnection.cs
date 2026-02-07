@@ -1,12 +1,9 @@
-using System.Text.Json;
-using Knx.Falcon;
-using Knx.Falcon.DataSecurity;
-using Knx.Falcon.Discovery;
-using Knx.Falcon.Sdk;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SRF.Knx.Config;
-using SRF.Network.Knx.FalconSupport;
+using SRF.Network.Knx;
+using SRF.Network.Knx.Connection;
+using SRF.Network.Knx.Messages;
 
 namespace SRF.Network.Knx.Connection;
 
@@ -14,23 +11,26 @@ public class KnxConnection : IKnxConnection
 {
     private readonly KnxConfiguration config;
     private readonly ILogger<KnxConnection> logger;
-    private readonly KnxBus knxBus;
+    private readonly IKnxBus knxBus;
 
-    public bool IsConnected { get => knxBus.ConnectionState == BusConnectionState.Connected; }
+    public bool IsConnected { get => knxBus.IsConnected; }
 
-    public event EventHandler<KnxConnectionEventArgs>? ConnectionStatusChanged;
+    public event EventHandler<KnxConnectionEventArgs>? ConnectionStateChanged;
 
     public event EventHandler<KnxMessageReceivedEventArgs>? MessageReceived;
 
     public KnxConnection(
-        FalconInitializer falconInitializer, // must be constructed before any other Knx.Falcon class is instanciated.
+        IKnxLibraryInitialization knxLibInitializer, // must be constructed before any other Knx.Falcon class is instanciated.
+        IKnxBus knxBus,
         IOptions<KnxConfiguration> options,
         ILogger<KnxConnection> logger)
     {
         this.config = options.Value;
         this.logger = logger;
 
-        knxBus = new KnxBus(config.ConnectionString);
+        this.knxBus = knxBus;
+
+        /* with Falcon...
         if (config.CommSecurity.UseCommSecurity)
         {
             if (!File.Exists(config.CommSecurity.KeyRingFile))
@@ -47,17 +47,9 @@ public class KnxConnection : IKnxConnection
             knxBus.GroupCommunicationSecurity = sec;
             logger.LogInformation("KNX communication security enabled.");
         }
+        */
 
         knxBus.ConnectionStateChanged += (s, e) => { OnConnectionStatusChanged(e); };
-    }
-
-    /// <summary>
-    /// If no cancellation token is provided, there's an internal 60s timeout token being generated.
-    /// </summary>
-    public static IAsyncEnumerable<IpDeviceDiscoveryResult> DiscoverKnxIpDevicesAsync(CancellationToken? token = null)
-    {
-        var discovery = new IpDeviceDiscovery() { UseExtendedSearch = true, UseV1Search = true };
-        return discovery.DiscoverAsync(token ?? new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token);
     }
 
     public async Task ConnectAsync()
@@ -67,11 +59,7 @@ public class KnxConnection : IKnxConnection
             await knxBus.ConnectAsync();
             if (knxBus.ConnectionState == BusConnectionState.Connected)
             {
-                logger.LogInformation("KNX bus connected with type {connectorType}", knxBus.ConnectorType);
-                logger.LogDebug("KNX connection config: {interfaceConfig}",
-                    JsonSerializer.Serialize(knxBus.InterfaceConfiguration, knxBus.InterfaceConfiguration.GetType()));
-                logger.LogDebug("KNX connection features: {interfaceFeatures}",
-                    JsonSerializer.Serialize(knxBus.InterfaceFeatures, knxBus.InterfaceFeatures.GetType()));
+                logger.LogInformation("KNX bus connected.");
                 knxBus.GroupMessageReceived += OnGroupMessageReceived;
             //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
             }
@@ -92,7 +80,7 @@ public class KnxConnection : IKnxConnection
         throw new NotImplementedException();
     }
 
-    protected virtual void OnConnectionStatusChanged(EventArgs e)
+    protected virtual void OnConnectionStatusChanged(KnxConnectionEventArgs e)
     {
         logger.LogTrace("Knx connection status changed to {connStatus}", knxBus.ConnectionState);
         ConnectionStatusChanged?.Invoke(this, new KnxConnectionEventArgs
