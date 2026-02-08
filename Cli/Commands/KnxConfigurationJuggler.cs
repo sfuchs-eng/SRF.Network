@@ -47,6 +47,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
         KnxConfigurationJuggler cmd,
         IOptions<KnxConfiguration> options,
         IKnxConfigFactory knxConfigFactory,
+        IOpenHabKnxConfigFactory openHabKnxConfigFactory,
         IHostApplicationLifetime applicationLifetime,
         ILogger<KnxConfigurationJuggler.Worker> logger,
         IServiceProvider serviceProvider
@@ -58,6 +59,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
         private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
         private readonly ILogger<Worker> logger = logger;
         private readonly IServiceProvider serviceProvider = serviceProvider;
+        private readonly IOpenHabKnxConfigFactory openHabKnxConfigFactory = openHabKnxConfigFactory;
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -210,7 +212,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogWarning("Legacy GAC '{}' doesn't exist.", cmd.LegacyGACFileName);
             else
             {
-                knxConfigFactory.OverrideConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
+                openHabKnxConfigFactory.OverrideConfigsFromLegacy(cmd.LegacyGACFileName, out DomainConfiguration domainConfig, out KnxOpenHabConfig openHabConfig);
                 // both are already safed.
                 logger.LogInformation("Converted legacy Group Address Config '{lgac}' to JSON configuration file.", cmd.LegacyGACFileName);
             }

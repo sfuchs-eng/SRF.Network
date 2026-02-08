@@ -9,6 +9,7 @@ public static class ExtensionsHosting
     public static IServiceCollection AddKnx<TConnector>(this IServiceCollection services)
         where TConnector : class, IKnxConnection
     {
+        
         services.AddKnxConfig();
 
         //services.AddSingleton<IFalconLoggerFactory, MSLoggingFalconLoggerFactory>();
