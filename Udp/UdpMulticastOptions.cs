@@ -6,9 +6,10 @@ namespace SRF.Network.Udp;
 public class UdpMulticastOptions
 {
     /// <summary>
-    /// Default configuration section name in appsettings.json.
+    /// Base configuration section name in appsettings.json.
+    /// Named connections live under <c>Udp:Connections:{name}</c>.
     /// </summary>
-    public const string DefaultConfigSectionName = "Udp:Multicast";
+    public const string DefaultConfigSectionName = "Udp:Connections";
 
     /// <summary>
     /// The multicast group address to join (e.g., "224.0.23.12" for KNX).

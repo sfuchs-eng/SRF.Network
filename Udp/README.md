@@ -15,7 +15,7 @@ It's initially designed for use with the SRF.Network.Knx library, but should ser
 - Asynchronous send and receive operations
 - Logging of socket operations and errors
 - Support for cancellation and timeouts
-- Dependency Injection (DI) support with IOptions pattern
+- Dependency Injection (DI) support with keyed services (multiple simultaneous connections)
 - Event-driven message reception
 - Hosting extensions for easy integration with .NET Generic Host
 
@@ -29,22 +29,36 @@ dotnet add reference path/to/SRF.Network.Udp.csproj
 
 ## Usage
 
-### Basic Setup with Dependency Injection
+### Multiple Named Connections with Dependency Injection
+
+Each UDP connection is identified by a **name** string. Services are registered as keyed singletons
+and injected using the `[FromKeyedServices("name")]` attribute.
 
 #### 1. Configure in appsettings.json
+
+Named connections live under `Udp:Connections:{name}`. Connection-manager options are nested inside
+each connection's block under `ConnectionManager`.
 
 ```json
 {
   "Udp": {
-    "Multicast": {
-      "MulticastAddress": "224.0.23.12",
-      "Port": 3671,
-      "LocalInterface": null,
-      "TimeToLive": 16,
-      "ReceiveBufferSize": 8192,
-      "SendBufferSize": 8192,
-      "ReuseAddress": true,
-      "ReceiveTimeout": "00:00:05"
+    "Connections": {
+      "Knx": {
+        "MulticastAddress": "224.0.23.12",
+        "Port": 3671,
+        "TimeToLive": 16,
+        "ConnectionManager": {
+          "AutoConnect": true,
+          "MaxSendAttempts": 5
+        }
+      },
+      "Discovery": {
+        "MulticastAddress": "239.0.0.1",
+        "Port": 5001,
+        "ConnectionManager": {
+          "ReconnectInterval": 30.0
+        }
+      }
     }
   }
 }
@@ -57,18 +71,21 @@ Using `IServiceCollection`:
 ```csharp
 using SRF.Network.Udp.Hosting;
 
-// In your Startup.cs or Program.cs
-services.AddUdpMulticast(); // Uses default config section "Udp:Multicast"
+// Register two independent connections.
+// Each name drives its own config section: Udp:Connections:{name}
+services.AddUdpMulticastWithConnectionManager("Knx");
+services.AddUdpMulticastWithConnectionManager("Discovery");
 
-// Or specify a custom configuration section
-services.AddUdpMulticast("MyCustomSection");
+// Client-only (no connection manager / message queue):
+services.AddUdpMulticast("Listener");
 ```
 
 Using `IHostBuilder`:
 
 ```csharp
 Host.CreateDefaultBuilder(args)
-    .AddUdpMulticast()
+    .AddUdpMulticastWithConnectionManager("Knx")
+    .AddUdpMulticastWithConnectionManager("Discovery")
     .ConfigureServices((context, services) =>
     {
         // Other services...
@@ -80,153 +97,99 @@ Using `IHostApplicationBuilder`:
 
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
-builder.AddUdpMulticast();
+builder.AddUdpMulticastWithConnectionManager("Knx");
+builder.AddUdpMulticastWithConnectionManager("Discovery");
+```
+
+You can also override the configuration section for a named connection:
+
+```csharp
+// Reads multicast options from "MyApp:KnxUdp" instead of "Udp:Connections:Knx"
+services.AddUdpMulticastWithConnectionManager("Knx", configSection: "MyApp:KnxUdp");
 ```
 
 #### 3. Inject and Use
 
+Use the `[FromKeyedServices("name")]` attribute to resolve the correct instance:
+
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
 using SRF.Network.Udp;
 
-public class MyService
+public class KnxProtocolHandler
 {
-    private readonly IUdpMulticastClient _udpClient;
-    private readonly ILogger<MyService> _logger;
+    private readonly IUdpMulticastClient _client;
+    private readonly IUdpMessageQueue    _queue;
+    private readonly ILogger<KnxProtocolHandler> _logger;
 
-    public MyService(IUdpMulticastClient udpClient, ILogger<MyService> logger)
+    public KnxProtocolHandler(
+        [FromKeyedServices("Knx")] IUdpMulticastClient client,
+        [FromKeyedServices("Knx")] IUdpMessageQueue    queue,
+        ILogger<KnxProtocolHandler> logger)
     {
-        _udpClient = udpClient;
+        _client = client;
+        _queue  = queue;
         _logger = logger;
 
-        // Subscribe to events
-        _udpClient.MessageReceived += OnMessageReceived;
-        _udpClient.ConnectionStatusChanged += OnConnectionStatusChanged;
+        _client.MessageReceived         += OnMessageReceived;
+        _client.ConnectionStatusChanged += OnConnectionStatusChanged;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        await _udpClient.ConnectAsync(cancellationToken);
-    }
-
-    public async Task SendDataAsync(byte[] data)
-    {
-        if (_udpClient.IsConnected)
-        {
-            await _udpClient.SendAsync(data);
-        }
-    }
+    public void SendQueued(byte[] data) => _queue.Enqueue(data);
 
     private void OnMessageReceived(object? sender, UdpMessageReceivedEventArgs e)
     {
-        _logger.LogInformation("Received {ByteCount} bytes from {RemoteEndPoint} at {ReceivedAt}",
-            e.Data.Length, e.RemoteEndPoint, e.ReceivedAt);
-        
-        // Process the data
-        ProcessMessage(e.Data);
+        _logger.LogInformation("Received {ByteCount} bytes from {RemoteEndPoint}",
+            e.Data.Length, e.RemoteEndPoint);
     }
 
     private void OnConnectionStatusChanged(object? sender, UdpConnectionEventArgs e)
     {
         if (e.IsConnected)
-        {
-            _logger.LogInformation("UDP client connected");
-        }
+            _logger.LogInformation("KNX UDP connected");
         else
-        {
-            _logger.LogWarning("UDP client disconnected: {ErrorMessage}", e.ErrorMessage);
-        }
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        await _udpClient.DisconnectAsync(cancellationToken);
+            _logger.LogWarning("KNX UDP disconnected: {ErrorMessage}", e.ErrorMessage);
     }
 }
 ```
 
-### Automatic Connection Management
-
-For production scenarios, use the `UdpConnectionManager` which provides automatic reconnection and queued message transmission with retry logic.
-
-#### 1. Configure in appsettings.json
-
-```json
-{
-  "Udp": {
-    "Multicast": {
-      "MulticastAddress": "224.0.23.12",
-      "Port": 3671
-    },
-    "ConnectionManager": {
-      "ReconnectInterval": 10.0,
-      "SendRetryInterval": 5.0,
-      "MaxSendAttempts": 3,
-      "AutoConnect": true
-    }
-  }
-}
-```
-
-#### 2. Register Services with Connection Manager
+### Message Queue and Send Status Events
 
 ```csharp
-using SRF.Network.Udp.Hosting;
-
-// Register with automatic connection management
-services.AddUdpMulticastWithConnectionManager();
-
-// Or with custom configuration sections
-services.AddUdpMulticastWithConnectionManager("Udp:Multicast", "Udp:ConnectionManager");
-```
-
-#### 3. Use with Message Queue
-
-```csharp
-using SRF.Network.Udp;
-
-public class MyService
+public void SendWithFeedback(byte[] data)
 {
-    private readonly IUdpMessageQueue _queue;
-    private readonly ILogger<MyService> _logger;
+    var item = _queue.Enqueue(data);
 
-    public MyService(IUdpMessageQueue queue, ILogger<MyService> logger)
-    {
-        _queue = queue;
-        _logger = logger;
-    }
+    item.Sent += (_, e) =>
+        _logger.LogInformation("Sent after {Attempts} attempt(s)", e.Attempts);
 
-    public void SendMessage(byte[] data)
-    {
-        // Enqueue message - it will be sent automatically when connected
-        var queueItem = _queue.Enqueue(data);
-
-        // Optionally subscribe to send status events
-        queueItem.Sent += (sender, e) =>
-        {
-            _logger.LogInformation("Message sent successfully after {Attempts} attempts", e.Attempts);
-        };
-
-        queueItem.Failed += (sender, e) =>
-        {
-            _logger.LogWarning("Message failed to send after {Attempts} attempts: {ErrorMessage}",
-                e.Attempts, e.ErrorMessage);
-        };
-    }
-
-    public int GetQueuedMessages() => _queue.QueuedMessageCount;
+    item.Failed += (_, e) =>
+        _logger.LogWarning("Failed after {Attempts} attempt(s): {Error}", e.Attempts, e.ErrorMessage);
 }
 ```
 
-**Connection Manager Features:**
-- **Automatic reconnection**: Tries to reconnect at regular intervals if connection is lost
-- **Message queuing**: Messages are queued and sent when connection is available
-- **Retry logic**: Failed messages are automatically retried up to a configurable limit
-- **Event notifications**: Get notified when messages are sent successfully or fail
-- **Background service**: Runs as a hosted service, no manual lifecycle management needed
+### Client-Only (no queue)
+
+When registered with `AddUdpMulticast`, only an `IUdpMulticastClient` keyed singleton is created.
+You are responsible for calling `ConnectAsync` / `DisconnectAsync` and sending directly.
+
+```csharp
+public class ListenerService : IHostedService
+{
+    private readonly IUdpMulticastClient _client;
+
+    public ListenerService([FromKeyedServices("Listener")] IUdpMulticastClient client)
+    {
+        _client = client;
+        _client.MessageReceived += (_, e) => Console.WriteLine($"Got {e.Data.Length} bytes");
+    }
+
+    public Task StartAsync(CancellationToken ct) => _client.ConnectAsync(ct);
+    public Task StopAsync(CancellationToken ct)  => _client.DisconnectAsync(ct);
+}
+```
 
 ### Manual Instantiation (without DI)
-
-If you prefer not to use dependency injection:
 
 ```csharp
 using Microsoft.Extensions.Options;
@@ -245,18 +208,12 @@ var logger = loggerFactory.CreateLogger<UdpMulticastClient>();
 
 using var client = new UdpMulticastClient(options, logger);
 
-client.MessageReceived += (sender, e) =>
-{
-    Console.WriteLine($"Received {e.Data.Length} bytes");
-};
+client.MessageReceived += (_, e) => Console.WriteLine($"Received {e.Data.Length} bytes");
 
 await client.ConnectAsync();
 
-// Send a message
-byte[] data = new byte[] { 0x01, 0x02, 0x03 };
-await client.SendAsync(data);
+await client.SendAsync(new byte[] { 0x01, 0x02, 0x03 });
 
-// Keep running...
 await Task.Delay(TimeSpan.FromMinutes(5));
 
 await client.DisconnectAsync();
@@ -265,6 +222,8 @@ await client.DisconnectAsync();
 ## Configuration Options
 
 ### UdpMulticastOptions
+
+Configuration section per connection: `Udp:Connections:{name}`
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -278,6 +237,8 @@ await client.DisconnectAsync();
 | `ReceiveTimeout` | TimeSpan | 5 seconds | Timeout for receive operations |
 
 ### UdpConnectionManagerOptions
+
+Configuration section per connection: `Udp:Connections:{name}:ConnectionManager`
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -295,17 +256,21 @@ The library is ideal for KNX IP Routing which uses UDP multicast on 224.0.23.12:
 ```json
 {
   "Udp": {
-    "Multicast": {
-      "MulticastAddress": "224.0.23.12",
-      "Port": 3671
+    "Connections": {
+      "Knx": {
+        "MulticastAddress": "224.0.23.12",
+        "Port": 3671
+      }
     }
   }
 }
 ```
 
-### Custom Protocol Implementation
+```csharp
+services.AddUdpMulticastWithConnectionManager("Knx");
+```
 
-For implementing custom multicast protocols:
+### Custom Protocol Implementation
 
 ```csharp
 public class MyProtocolHandler
@@ -313,20 +278,18 @@ public class MyProtocolHandler
     private readonly IUdpMulticastClient _client;
     private readonly IUdpMessageQueue _queue;
 
-    // Inject both: _client for receiving, _queue for queued/reliable sending
-    public MyProtocolHandler(IUdpMulticastClient client, IUdpMessageQueue queue)
+    public MyProtocolHandler(
+        [FromKeyedServices("MyProto")] IUdpMulticastClient client,
+        [FromKeyedServices("MyProto")] IUdpMessageQueue    queue)
     {
         _client = client;
-        _queue = queue;
+        _queue  = queue;
         _client.MessageReceived += OnMessageReceived;
     }
 
     private void OnMessageReceived(object? sender, UdpMessageReceivedEventArgs e)
     {
-        // Parse your protocol's binary format
         var message = MyProtocol.Parse(e.Data);
-
-        // Handle the message
         HandleMessage(message);
     }
 
@@ -335,10 +298,7 @@ public class MyProtocolHandler
     /// Suitable for real-time data where stale messages should be dropped.
     /// </summary>
     public async Task SendDirectAsync(MyProtocolMessage message)
-    {
-        byte[] data = MyProtocol.Encode(message);
-        await _client.SendAsync(data);
-    }
+        => await _client.SendAsync(MyProtocol.Encode(message));
 
     /// <summary>
     /// Queued send: buffers the message until the connection is available,
@@ -346,9 +306,7 @@ public class MyProtocolHandler
     /// </summary>
     public void SendQueued(MyProtocolMessage message)
     {
-        byte[] data = MyProtocol.Encode(message);
-        var item = _queue.Enqueue(data);
-
+        var item = _queue.Enqueue(MyProtocol.Encode(message));
         item.Failed += (_, e) =>
             Console.Error.WriteLine($"Send failed after {e.Attempts} attempts: {e.ErrorMessage}");
     }
@@ -357,7 +315,9 @@ public class MyProtocolHandler
 
 ## Logging
 
-The library uses `ILogger<T>` for comprehensive logging:
+The library uses `ILogger<T>` for comprehensive logging. Log messages from
+`UdpConnectionManager` include a `{ConnectionName}` structured property, making it easy to
+distinguish between connections in multi-connection scenarios.
 
 - **Trace**: Detailed message send/receive operations
 - **Debug**: Receive loop lifecycle events

@@ -4,8 +4,9 @@ namespace SRF.Network.Udp;
 /// Injectable service for enqueueing UDP messages for transmission.
 /// Consumers inject this interface to send UDP messages without needing to
 /// know about connection state or retry logic.
-/// Register via <c>AddUdpMulticastWithConnectionManager()</c> which also
-/// registers the background service that drains this queue.
+/// Register via <c>AddUdpMulticastWithConnectionManager(name)</c> which also
+/// registers the background service that drains this queue — and a keyed
+/// <see cref="IUdpMulticastClient"/> for receiving messages.
 /// </summary>
 public interface IUdpMessageQueue
 {

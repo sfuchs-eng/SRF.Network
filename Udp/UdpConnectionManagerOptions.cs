@@ -6,9 +6,10 @@ namespace SRF.Network.Udp;
 public class UdpConnectionManagerOptions
 {
     /// <summary>
-    /// Default configuration section name in appsettings.json.
+    /// Sub-section name nested inside each named connection's configuration block.
+    /// The full path is <c>Udp:Connections:{name}:ConnectionManager</c>.
     /// </summary>
-    public const string DefaultConfigSectionName = "Udp:ConnectionManager";
+    public const string SubSectionName = "ConnectionManager";
 
     /// <summary>
     /// Interval in seconds between connection attempts. Default is 10 seconds.

@@ -1,126 +1,191 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace SRF.Network.Udp.Hosting;
 
 /// <summary>
-/// Extension methods for registering UDP multicast services with the dependency injection container.
+/// Extension methods for registering named UDP multicast services with the dependency injection container.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Each connection is identified by a <c>name</c> string that acts as the DI key. The full
+/// configuration path for a named connection follows the convention
+/// <c>Udp:Connections:{name}</c> (multicast options) and
+/// <c>Udp:Connections:{name}:ConnectionManager</c> (connection-manager options).
+/// </para>
+/// <para>
+/// Consumers retrieve named services using the <c>[FromKeyedServices("name")]</c> attribute:
+/// <code>
+/// public MyService([FromKeyedServices("Knx")] IUdpMulticastClient knxClient,
+///                  [FromKeyedServices("Knx")] IUdpMessageQueue    knxQueue) { }
+/// </code>
+/// </para>
+/// <para>
+/// Multiple independent connections can be registered in a single host by calling the
+/// extension methods once per named connection.
+/// </para>
+/// </remarks>
 public static class UdpMulticastHostingExtensions
 {
+    // -------------------------------------------------------------------------
+    // IServiceCollection
+    // -------------------------------------------------------------------------
+
     /// <summary>
-    /// Adds UDP multicast services to the service collection.
+    /// Adds a named UDP multicast client to the service collection.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configSection">The configuration section name. Defaults to "Udp:Multicast".</param>
+    /// <param name="name">The connection name used as the DI key and to resolve the config section.</param>
+    /// <param name="configSection">
+    /// Explicit configuration section path. Defaults to <c>Udp:Connections:{name}</c>.
+    /// </param>
     /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddUdpMulticast(this IServiceCollection services, string? configSection = null)
+    public static IServiceCollection AddUdpMulticast(
+        this IServiceCollection services,
+        string name,
+        string? configSection = null)
     {
-        services.AddOptions<UdpMulticastOptions>()
-            .BindConfiguration(configSection ?? UdpMulticastOptions.DefaultConfigSectionName);
+        ArgumentNullException.ThrowIfNull(name);
 
-        services.AddSingleton<IUdpMulticastClient, UdpMulticastClient>();
+        string section = configSection ?? $"{UdpMulticastOptions.DefaultConfigSectionName}:{name}";
+
+        services.AddOptions<UdpMulticastOptions>(name)
+            .BindConfiguration(section);
+
+        // Keyed singleton: each name gets its own UdpMulticastClient instance.
+        // Factory reads the named options snapshot so the correct address/port are used.
+        services.AddKeyedSingleton<IUdpMulticastClient>(name, (sp, _) =>
+        {
+            var monitor = sp.GetRequiredService<IOptionsMonitor<UdpMulticastOptions>>();
+            var opts    = Options.Create(monitor.Get(name));
+            var logger  = sp.GetRequiredService<ILogger<UdpMulticastClient>>();
+            return new UdpMulticastClient(opts, logger);
+        });
 
         return services;
     }
 
     /// <summary>
-    /// Adds UDP multicast services with automatic connection management to the service collection.
-    /// <para>
-    /// Registers two singletons on the same <see cref="UdpMessageQueue"/> instance:
-    /// <list type="bullet">
-    ///   <item><see cref="IUdpMessageQueue"/> — inject into consumers to enqueue messages.</item>
-    ///   <item><see cref="UdpMessageQueue"/> — injected by <see cref="UdpConnectionManager"/> to drain the queue.</item>
-    /// </list>
-    /// Consumers who want to receive messages should inject <see cref="IUdpMulticastClient"/> directly.
-    /// </para>
+    /// Adds a named UDP multicast client together with automatic connection management and
+    /// a message queue to the service collection.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two keyed singletons are registered on the same <see cref="UdpMessageQueue"/> instance:
+    /// <list type="bullet">
+    ///   <item><c>[FromKeyedServices(name)] IUdpMessageQueue</c> — inject into consumers to enqueue messages.</item>
+    ///   <item><c>[FromKeyedServices(name)] UdpMessageQueue</c> — concrete type, used internally by the connection manager.</item>
+    /// </list>
+    /// A <see cref="UdpConnectionManager"/> background service is also registered as
+    /// <see cref="IHostedService"/>. Multiple calls with different names each produce their own
+    /// independent connection-manager instance.
+    /// </para>
+    /// </remarks>
     /// <param name="services">The service collection.</param>
-    /// <param name="multicastConfigSection">The multicast configuration section name. Defaults to "Udp:Multicast".</param>
-    /// <param name="managerConfigSection">The connection manager configuration section name. Defaults to "Udp:ConnectionManager".</param>
+    /// <param name="name">The connection name used as the DI key and to resolve the config section.</param>
+    /// <param name="configSection">
+    /// Explicit configuration section path for <see cref="UdpMulticastOptions"/>.
+    /// Defaults to <c>Udp:Connections:{name}</c>.
+    /// Connection-manager options are always read from <c>{resolvedSection}:ConnectionManager</c>.
+    /// </param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddUdpMulticastWithConnectionManager(
         this IServiceCollection services,
-        string? multicastConfigSection = null,
-        string? managerConfigSection = null)
+        string name,
+        string? configSection = null)
     {
-        services.AddUdpMulticast(multicastConfigSection);
+        ArgumentNullException.ThrowIfNull(name);
 
-        services.AddOptions<UdpConnectionManagerOptions>()
-            .BindConfiguration(managerConfigSection ?? UdpConnectionManagerOptions.DefaultConfigSectionName);
+        string multicastSection = configSection ?? $"{UdpMulticastOptions.DefaultConfigSectionName}:{name}";
+        string managerSection   = $"{multicastSection}:{UdpConnectionManagerOptions.SubSectionName}";
 
-        // Register the queue as its concrete type so UdpConnectionManager can take it directly
-        // and access internal Take()/CompleteAdding(). Also forward IUdpMessageQueue to the
-        // same singleton so injection by interface resolves the same instance.
-        services.AddSingleton<UdpMessageQueue>();
-        services.AddSingleton<IUdpMessageQueue>(sp => sp.GetRequiredService<UdpMessageQueue>());
+        services.AddUdpMulticast(name, multicastSection);
 
-        services.AddHostedService<UdpConnectionManager>();
+        services.AddOptions<UdpConnectionManagerOptions>(name)
+            .BindConfiguration(managerSection);
+
+        // Concrete keyed singleton — UdpConnectionManager injects this to access internal members.
+        services.AddKeyedSingleton<UdpMessageQueue>(name, (sp, _) =>
+        {
+            var client = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
+            var logger = sp.GetRequiredService<ILogger<UdpMessageQueue>>();
+            return new UdpMessageQueue(client, logger);
+        });
+
+        // Interface keyed singleton — consumers inject this to enqueue messages.
+        // Resolves the same instance as the concrete registration above.
+        services.AddKeyedSingleton<IUdpMessageQueue>(name,
+            (sp, _) => sp.GetRequiredKeyedService<UdpMessageQueue>(name));
+
+        // Register the connection manager as IHostedService using a factory so that
+        // multiple named managers can coexist — AddHostedService<T>() would collide on the
+        // same closed generic type when called more than once.
+        services.Add(ServiceDescriptor.Singleton<IHostedService>(sp =>
+        {
+            var queue   = sp.GetRequiredKeyedService<UdpMessageQueue>(name);
+            var monitor = sp.GetRequiredService<IOptionsMonitor<UdpConnectionManagerOptions>>();
+            var opts    = Options.Create(monitor.Get(name));
+            var logger  = sp.GetRequiredService<ILogger<UdpConnectionManager>>();
+            return new UdpConnectionManager(name, queue, opts, logger);
+        }));
 
         return services;
     }
 
-    /// <summary>
-    /// Adds UDP multicast services to the host builder.
-    /// </summary>
-    /// <param name="builder">The host builder.</param>
-    /// <param name="configSection">The configuration section name. Defaults to "Udp:Multicast".</param>
-    /// <returns>The host builder for chaining.</returns>
-    public static IHostBuilder AddUdpMulticast(this IHostBuilder builder, string? configSection = null)
-    {
-        builder.ConfigureServices((context, services) =>
-        {
-            services.AddUdpMulticast(configSection);
-        });
+    // -------------------------------------------------------------------------
+    // IHostBuilder
+    // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Adds a named UDP multicast client to the host builder.
+    /// </summary>
+    public static IHostBuilder AddUdpMulticast(
+        this IHostBuilder builder,
+        string name,
+        string? configSection = null)
+    {
+        builder.ConfigureServices((_, services) => services.AddUdpMulticast(name, configSection));
         return builder;
     }
 
     /// <summary>
-    /// Adds UDP multicast services with automatic connection management to the host builder.
+    /// Adds a named UDP multicast client with automatic connection management to the host builder.
     /// </summary>
-    /// <param name="builder">The host builder.</param>
-    /// <param name="multicastConfigSection">The multicast configuration section name. Defaults to "Udp:Multicast".</param>
-    /// <param name="managerConfigSection">The connection manager configuration section name. Defaults to "Udp:ConnectionManager".</param>
-    /// <returns>The host builder for chaining.</returns>
     public static IHostBuilder AddUdpMulticastWithConnectionManager(
         this IHostBuilder builder,
-        string? multicastConfigSection = null,
-        string? managerConfigSection = null)
+        string name,
+        string? configSection = null)
     {
-        builder.ConfigureServices((context, services) =>
-        {
-            services.AddUdpMulticastWithConnectionManager(multicastConfigSection, managerConfigSection);
-        });
+        builder.ConfigureServices((_, services) => services.AddUdpMulticastWithConnectionManager(name, configSection));
+        return builder;
+    }
 
+    // -------------------------------------------------------------------------
+    // IHostApplicationBuilder
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Adds a named UDP multicast client to the host application builder.
+    /// </summary>
+    public static IHostApplicationBuilder AddUdpMulticast(
+        this IHostApplicationBuilder builder,
+        string name,
+        string? configSection = null)
+    {
+        builder.Services.AddUdpMulticast(name, configSection);
         return builder;
     }
 
     /// <summary>
-    /// Adds UDP multicast services to the host application builder.
+    /// Adds a named UDP multicast client with automatic connection management to the host application builder.
     /// </summary>
-    /// <param name="builder">The host application builder.</param>
-    /// <param name="configSection">The configuration section name. Defaults to "Udp:Multicast".</param>
-    /// <returns>The host application builder for chaining.</returns>
-    public static IHostApplicationBuilder AddUdpMulticast(this IHostApplicationBuilder builder, string? configSection = null)
-    {
-        builder.Services.AddUdpMulticast(configSection);
-        return builder;
-    }
-
-    /// <summary>
-    /// Adds UDP multicast services with automatic connection management to the host application builder.
-    /// </summary>
-    /// <param name="builder">The host application builder.</param>
-    /// <param name="multicastConfigSection">The multicast configuration section name. Defaults to "Udp:Multicast".</param>
-    /// <param name="managerConfigSection">The connection manager configuration section name. Defaults to "Udp:ConnectionManager".</param>
-    /// <returns>The host application builder for chaining.</returns>
     public static IHostApplicationBuilder AddUdpMulticastWithConnectionManager(
         this IHostApplicationBuilder builder,
-        string? multicastConfigSection = null,
-        string? managerConfigSection = null)
+        string name,
+        string? configSection = null)
     {
-        builder.Services.AddUdpMulticastWithConnectionManager(multicastConfigSection, managerConfigSection);
+        builder.Services.AddUdpMulticastWithConnectionManager(name, configSection);
         return builder;
     }
 }
