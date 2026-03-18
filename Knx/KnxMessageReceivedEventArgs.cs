@@ -11,8 +11,8 @@ public class KnxMessageReceivedEventArgs
         KnxMessageContext = context;
     }
 
-    public KnxMessageReceivedEventArgs(GroupEventArgs groupEventArgs)
+    public KnxMessageReceivedEventArgs(GroupEventArgs groupEventArgs, DateTimeOffset receivedAt)
     {
-        KnxMessageContext = new(groupEventArgs);
+        KnxMessageContext = new(groupEventArgs, receivedAt);
     }
 }

@@ -12,6 +12,7 @@ public class UdpMulticastClient : IUdpMulticastClient
 {
     private readonly UdpMulticastOptions _options;
     private readonly ILogger<UdpMulticastClient> _logger;
+    private readonly TimeProvider _timeProvider;
     private UdpClient? _udpClient;
     private IPEndPoint? _multicastEndPoint;
     private IPAddress? _multicastAddress;
@@ -43,10 +44,11 @@ public class UdpMulticastClient : IUdpMulticastClient
     public event EventHandler<UdpConnectionEventArgs>? ConnectionStatusChanged;
     public event EventHandler<UdpMessageReceivedEventArgs>? MessageReceived;
 
-    public UdpMulticastClient(IOptions<UdpMulticastOptions> options, ILogger<UdpMulticastClient> logger)
+    public UdpMulticastClient(IOptions<UdpMulticastOptions> options, ILogger<UdpMulticastClient> logger, TimeProvider timeProvider)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -176,7 +178,7 @@ public class UdpMulticastClient : IUdpMulticastClient
             try
             {
                 var result = await _udpClient!.ReceiveAsync(cancellationToken);
-                var receivedAt = DateTime.UtcNow;
+                var receivedAt = _timeProvider.GetUtcNow();
 
                 _logger.LogTrace("Received {ByteCount} bytes from {RemoteEndPoint}",
                     result.Buffer.Length, result.RemoteEndPoint);

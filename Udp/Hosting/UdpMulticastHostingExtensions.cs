@@ -50,6 +50,8 @@ public static class UdpMulticastHostingExtensions
 
         string section = configSection ?? $"{UdpMulticastOptions.DefaultConfigSectionName}:{name}";
 
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddOptions<UdpMulticastOptions>(name)
             .BindConfiguration(section);
 
@@ -60,7 +62,8 @@ public static class UdpMulticastHostingExtensions
             var monitor = sp.GetRequiredService<IOptionsMonitor<UdpMulticastOptions>>();
             var opts    = Options.Create(monitor.Get(name));
             var logger  = sp.GetRequiredService<ILogger<UdpMulticastClient>>();
-            return new UdpMulticastClient(opts, logger);
+            var tp      = sp.GetRequiredService<TimeProvider>();
+            return new UdpMulticastClient(opts, logger, tp);
         });
 
         return services;
@@ -110,7 +113,8 @@ public static class UdpMulticastHostingExtensions
         {
             var client = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
             var logger = sp.GetRequiredService<ILogger<UdpMessageQueue>>();
-            return new UdpMessageQueue(client, logger);
+            var tp     = sp.GetRequiredService<TimeProvider>();
+            return new UdpMessageQueue(client, logger, tp);
         });
 
         // Interface keyed singleton — consumers inject this to enqueue messages.
@@ -127,7 +131,8 @@ public static class UdpMulticastHostingExtensions
             var monitor = sp.GetRequiredService<IOptionsMonitor<UdpConnectionManagerOptions>>();
             var opts    = Options.Create(monitor.Get(name));
             var logger  = sp.GetRequiredService<ILogger<UdpConnectionManager>>();
-            return new UdpConnectionManager(name, queue, opts, logger);
+            var tp      = sp.GetRequiredService<TimeProvider>();
+            return new UdpConnectionManager(name, queue, opts, logger, tp);
         }));
 
         return services;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SRF.Knx.Config;
 using SRF.Network.Misc;
 
@@ -15,7 +16,7 @@ public static class ExtensionsHosting
         //services.AddSingleton<IFalconLoggerFactory, MSLoggingFalconLoggerFactory>();
         //services.AddSingleton<FalconInitializer>();
 
-        services.AddSingleton(TimeProvider.System);
+        services.TryAddSingleton(TimeProvider.System);
 
         services.AddSingleton<IKnxConnection, TConnector>();
         return services;

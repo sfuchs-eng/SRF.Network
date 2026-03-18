@@ -20,9 +20,9 @@ public class UdpMessageReceivedEventArgs : EventArgs
     /// <summary>
     /// The timestamp when the message was received.
     /// </summary>
-    public DateTime ReceivedAt { get; }
+    public DateTimeOffset ReceivedAt { get; }
 
-    public UdpMessageReceivedEventArgs(byte[] data, IPEndPoint remoteEndPoint, DateTime receivedAt)
+    public UdpMessageReceivedEventArgs(byte[] data, IPEndPoint remoteEndPoint, DateTimeOffset receivedAt)
     {
         Data = data ?? throw new ArgumentNullException(nameof(data));
         RemoteEndPoint = remoteEndPoint ?? throw new ArgumentNullException(nameof(remoteEndPoint));

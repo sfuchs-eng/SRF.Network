@@ -11,6 +11,7 @@ public sealed class UdpMessageQueue : IUdpMessageQueue, IDisposable
 {
     private readonly BlockingCollection<UdpQueueItem> _queue = new();
     private readonly ILogger<UdpMessageQueue> _logger;
+    private readonly TimeProvider _timeProvider;
     private bool _disposed;
 
     /// <summary>
@@ -23,10 +24,11 @@ public sealed class UdpMessageQueue : IUdpMessageQueue, IDisposable
     public int QueuedMessageCount => _queue.Count;
     public bool IsCompleted => _queue.IsCompleted;
 
-    public UdpMessageQueue(IUdpMulticastClient client, ILogger<UdpMessageQueue> logger)
+    public UdpMessageQueue(IUdpMulticastClient client, ILogger<UdpMessageQueue> logger, TimeProvider timeProvider)
     {
         Client = client ?? throw new ArgumentNullException(nameof(client));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     /// <inheritdoc />
@@ -37,7 +39,7 @@ public sealed class UdpMessageQueue : IUdpMessageQueue, IDisposable
         if (_queue.IsAddingCompleted)
             throw new InvalidOperationException("Cannot enqueue: the message queue has been shut down.");
 
-        var item = new UdpQueueItem(data);
+        var item = new UdpQueueItem(data, _timeProvider.GetUtcNow());
         _queue.Add(item);
         _logger.LogTrace("Enqueued UDP message ({ByteCount} bytes). Queue depth: {QueueDepth}",
             data.Length, _queue.Count);

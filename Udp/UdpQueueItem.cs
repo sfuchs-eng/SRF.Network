@@ -18,7 +18,7 @@ public class UdpQueueItem
     /// <summary>
     /// Timestamp when the item was queued.
     /// </summary>
-    public DateTime QueuedAt { get; }
+    public DateTimeOffset QueuedAt { get; }
 
     /// <summary>
     /// Event raised when the message has been sent successfully.
@@ -30,21 +30,21 @@ public class UdpQueueItem
     /// </summary>
     public event EventHandler<UdpMessageFailedEventArgs>? Failed;
 
-    public UdpQueueItem(byte[] data)
+    public UdpQueueItem(byte[] data, DateTimeOffset queuedAt)
     {
         Data = data ?? throw new ArgumentNullException(nameof(data));
-        QueuedAt = DateTime.UtcNow;
+        QueuedAt = queuedAt;
         Attempts = 0;
     }
 
-    internal void NotifySent()
+    internal void NotifySent(DateTimeOffset sentAt)
     {
-        Sent?.Invoke(this, new UdpMessageSentEventArgs(Data, Attempts));
+        Sent?.Invoke(this, new UdpMessageSentEventArgs(Data, Attempts, sentAt));
     }
 
-    internal void NotifyFailed(string errorMessage)
+    internal void NotifyFailed(DateTimeOffset failedAt, string errorMessage)
     {
-        Failed?.Invoke(this, new UdpMessageFailedEventArgs(Data, Attempts, errorMessage));
+        Failed?.Invoke(this, new UdpMessageFailedEventArgs(Data, Attempts, errorMessage, failedAt));
     }
 }
 
@@ -55,13 +55,13 @@ public class UdpMessageSentEventArgs : EventArgs
 {
     public byte[] Data { get; }
     public int Attempts { get; }
-    public DateTime SentAt { get; }
+    public DateTimeOffset SentAt { get; }
 
-    public UdpMessageSentEventArgs(byte[] data, int attempts)
+    public UdpMessageSentEventArgs(byte[] data, int attempts, DateTimeOffset sentAt)
     {
         Data = data;
         Attempts = attempts;
-        SentAt = DateTime.UtcNow;
+        SentAt = sentAt;
     }
 }
 
@@ -73,13 +73,13 @@ public class UdpMessageFailedEventArgs : EventArgs
     public byte[] Data { get; }
     public int Attempts { get; }
     public string ErrorMessage { get; }
-    public DateTime FailedAt { get; }
+    public DateTimeOffset FailedAt { get; }
 
-    public UdpMessageFailedEventArgs(byte[] data, int attempts, string errorMessage)
+    public UdpMessageFailedEventArgs(byte[] data, int attempts, string errorMessage, DateTimeOffset failedAt)
     {
         Data = data;
         Attempts = attempts;
         ErrorMessage = errorMessage;
-        FailedAt = DateTime.UtcNow;
+        FailedAt = failedAt;
     }
 }

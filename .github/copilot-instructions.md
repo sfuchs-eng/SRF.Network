@@ -33,6 +33,7 @@ Multi-project solution of modular .NET networking libraries for home automation.
 
 ## Misc rules
 - Use TimeProvider.System for all time-related operations to allow for testing with fake time providers
+- Use DateTimeOffset instead of DateTime for all timestamps, unless bound by external API contracts that require DateTime or existing code that is related to serialized configuration files.
 
 ## Dependency Injection Pattern
 

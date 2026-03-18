@@ -15,6 +15,7 @@ public class UdpConnectionManager : BackgroundService
     private readonly UdpMessageQueue _queue;
     private readonly UdpConnectionManagerOptions _options;
     private readonly ILogger<UdpConnectionManager> _logger;
+    private readonly TimeProvider _timeProvider;
     private CancellationTokenSource? _operationsCts;
     private Task? _connectionTask;
     private Task? _sendingTask;
@@ -26,12 +27,14 @@ public class UdpConnectionManager : BackgroundService
         string name,
         UdpMessageQueue queue,
         IOptions<UdpConnectionManagerOptions> options,
-        ILogger<UdpConnectionManager> logger)
+        ILogger<UdpConnectionManager> logger,
+        TimeProvider timeProvider)
     {
-        _name    = name    ?? throw new ArgumentNullException(nameof(name));
-        _queue   = queue   ?? throw new ArgumentNullException(nameof(queue));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _logger  = logger  ?? throw new ArgumentNullException(nameof(logger));
+        _name         = name    ?? throw new ArgumentNullException(nameof(name));
+        _queue        = queue   ?? throw new ArgumentNullException(nameof(queue));
+        _options      = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger       = logger  ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -154,7 +157,7 @@ public class UdpConnectionManager : BackgroundService
                     else
                     {
                         _logger.LogWarning("[{ConnectionName}] Message failed after {Attempts} attempts, giving up", _name, item.Attempts);
-                        item.NotifyFailed($"Failed after {item.Attempts} attempts");
+                        item.NotifyFailed(_timeProvider.GetUtcNow(), $"Failed after {item.Attempts} attempts");
                     }
                 }
             }
@@ -180,7 +183,7 @@ public class UdpConnectionManager : BackgroundService
             await Client.SendAsync(item.Data, cancellationToken);
             _logger.LogTrace("[{ConnectionName}] Sent UDP message with {ByteCount} bytes (attempt {Attempts})",
                 _name, item.Data.Length, item.Attempts);
-            item.NotifySent();
+            item.NotifySent(_timeProvider.GetUtcNow());
             return true;
         }
         catch (InvalidOperationException ex)

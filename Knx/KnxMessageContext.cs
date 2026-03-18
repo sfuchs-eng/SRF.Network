@@ -9,10 +9,10 @@ public class KnxMessageContext
     public GroupEventArgs? GroupEventArgs { get; set; }
     //public IoTGroupEventArgs? IoTGroupEventArgs { get; set; }
 
-    public KnxMessageContext(GroupEventArgs groupEventArgs, DateTimeOffset? receivedAt = null)
+    public KnxMessageContext(GroupEventArgs groupEventArgs, DateTimeOffset receivedAt)
     {
         GroupEventArgs = groupEventArgs ?? throw new ArgumentNullException(nameof(groupEventArgs));
-        ReceivedAt = receivedAt ?? DateTimeOffset.UtcNow;
+        ReceivedAt = receivedAt;
     }
 
 /*

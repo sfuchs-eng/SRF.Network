@@ -1,8 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SRF.Knx.Config;
-using SRF.Network.Knx;
-using SRF.Network.Knx.Connection;
 using SRF.Network.Knx.Messages;
 
 namespace SRF.Network.Knx.Connection;
@@ -12,6 +9,7 @@ public class KnxConnection : IKnxConnection
     private readonly KnxConfiguration config;
     private readonly ILogger<KnxConnection> logger;
     private readonly IKnxBus knxBus;
+    private readonly TimeProvider _timeProvider;
 
     public bool IsConnected { get => knxBus.IsConnected; }
 
@@ -22,12 +20,13 @@ public class KnxConnection : IKnxConnection
         IKnxLibraryInitialization knxLibInitializer, // must be constructed before any other Knx.Falcon class is instanciated.
         IKnxBus knxBus,
         IOptions<KnxConfiguration> options,
-        ILogger<KnxConnection> logger)
+        ILogger<KnxConnection> logger,
+        TimeProvider timeProvider)
     {
         this.config = options.Value;
         this.logger = logger;
-
         this.knxBus = knxBus;
+        this._timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
         /* with Falcon...
         if (config.CommSecurity.UseCommSecurity)
@@ -91,7 +90,7 @@ public class KnxConnection : IKnxConnection
     {
         try
         {
-            var ctx = new KnxMessageContext(e);
+            var ctx = new KnxMessageContext(e, _timeProvider.GetUtcNow());
             MessageReceived?.Invoke(this, new KnxMessageReceivedEventArgs(ctx));
         }
         catch (Exception ex)
