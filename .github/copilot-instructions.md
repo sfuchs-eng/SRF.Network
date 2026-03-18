@@ -18,6 +18,11 @@ Multi-project solution of modular .NET networking libraries for home automation.
     └── SRF.Knx/ (library for KNX protocol encoding/decoding, used by Knx and Knx.Falcon)
 ```
 
+### Other projects & folders
+
+- **Docs/AI**: Design documents, architecture decisions, and API documentation
+- **Cli/**: Command-line tools for testing and diagnostics, serves as a playground for new features and API design as well as a reference implementation for consumers
+
 ## Code Style
 
 - **Target**: .NET 10.0, C# 13, nullable enabled
@@ -25,6 +30,9 @@ Multi-project solution of modular .NET networking libraries for home automation.
 - **Usings**: Global usings in `globalusings.cs` per project (System, System.Net.*, Microsoft.Extensions.*)
 - **Documentation**: XML comments on all public APIs
 - **Field initialization**: Use field initializers or constructor, avoid nullable fields without null checks
+
+## Misc rules
+- Use TimeProvider.System for all time-related operations to allow for testing with fake time providers
 
 ## Dependency Injection Pattern
 
