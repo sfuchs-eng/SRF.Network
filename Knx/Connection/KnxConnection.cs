@@ -4,6 +4,10 @@ using SRF.Network.Knx.Messages;
 
 namespace SRF.Network.Knx.Connection;
 
+/// <summary>
+/// Represents a connection to a KNX bus, managing the connection state, handling incoming messages, and providing an interface for sending messages.
+/// It uses <see cref="IKnxBus"/> for interacting with the underlying KNX bus and its connection protocols.
+/// </summary>
 public class KnxConnection : IKnxConnection
 {
     private readonly KnxConfiguration config;
@@ -16,8 +20,16 @@ public class KnxConnection : IKnxConnection
     public event EventHandler<KnxMessageReceivedEventArgs>? MessageReceived;
     public event EventHandler<Knx.KnxConnectionEventArgs>? ConnectionStatusChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KnxConnection"/> class.
+    /// </summary>
+    /// <param name="knxLibInitializer">The KNX library initializer. Allows to initialize the KNX library before any other KNX components are instantiated.</param>
+    /// <param name="knxBus">The KNX bus instance.</param>
+    /// <param name="options">The KNX configuration options.</param>
+    /// <param name="logger">The logger instance.</param>
+    /// <param name="timeProvider">The time provider instance.</param>
     public KnxConnection(
-        IKnxLibraryInitialization knxLibInitializer, // must be constructed before any other Knx.Falcon class is instanciated.
+        IKnxLibraryInitialization knxLibInitializer,
         IKnxBus knxBus,
         IOptions<KnxConfiguration> options,
         ILogger<KnxConnection> logger,
@@ -28,7 +40,7 @@ public class KnxConnection : IKnxConnection
         this.knxBus = knxBus;
         this._timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
-        /* with Falcon...
+        /* with Falcon... which is meanwhile removed and put into a separate package/project.
         if (config.CommSecurity.UseCommSecurity)
         {
             if (!File.Exists(config.CommSecurity.KeyRingFile))
@@ -59,7 +71,7 @@ public class KnxConnection : IKnxConnection
             {
                 logger.LogInformation("KNX bus connected.");
                 knxBus.GroupMessageReceived += OnGroupMessageReceived;
-            //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
+                //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
             }
             else
                 logger.LogError("KNX bus connection failed, left in status {connectionStatus}", knxBus.ConnectionState);
@@ -86,7 +98,7 @@ public class KnxConnection : IKnxConnection
         });
     }
 
-    private void OnGroupMessageReceived(object? sender, GroupEventArgs e)
+    protected virtual void OnGroupMessageReceived(object? sender, GroupEventArgs e)
     {
         try
         {
@@ -101,10 +113,10 @@ public class KnxConnection : IKnxConnection
         }
     }
 
-/*
-    private void OnIoTGroupMessageReceived(object? sender, IoTGroupEventArgs e)
-    {
-        logger.LogWarning("{methodName} for handling IoT group messages is not implemented yet.", nameof(OnIoTGroupMessageReceived));
-    }
-    */
+    /*
+        private void OnIoTGroupMessageReceived(object? sender, IoTGroupEventArgs e)
+        {
+            logger.LogWarning("{methodName} for handling IoT group messages is not implemented yet.", nameof(OnIoTGroupMessageReceived));
+        }
+        */
 }
