@@ -1,5 +1,5 @@
 namespace SRF.Network.Knx;
 
-public class KnxConnectionEventArgs
+public class KnxConnectionEventArgs : EventArgs
 {
 }
