@@ -34,7 +34,7 @@ public class CemiLDataFrame : IPacket
 
     private const byte DefaultCtrl1     = 0xBC; // standard frame, no repeat, normal priority, no ACK
     private const byte DefaultCtrl2Daf  = 0xE0; // dest=group (bit 7), hop count 6 (bits 6-4)
-    private const int  FixedHeaderBytes = 10;   // everything up to and including the APCI low byte
+    private const int  FixedHeaderBytes = 11;   // bytes 0–10: msgCode, addInfoLen, ctrl1, ctrl2, src(2), dst(2), dataLen, tpci, apciLow
 
     public byte MessageCode { get; set; } = MessageCodeReq;
     public byte Ctrl1 { get; set; } = DefaultCtrl1;
@@ -50,11 +50,11 @@ public class CemiLDataFrame : IPacket
     public int Measure()
     {
         int dataLen = Value.Value.Length;
-        // 0-byte payloads (GroupValueRead) still occupy the APCI low byte (data length field = 1)
-        // APDU = TPCI(1) + APCI_high(0, merged into TPCI byte) + APCI_low(1) + extra data
-        // DataLength field = number of APDU bytes after TPCI = 1 + extraDataBytes
-        int extraDataBytes = dataLen > 0 ? dataLen : 0;
-        return FixedHeaderBytes + extraDataBytes;
+        // Mirror the smallData logic in Encode(): small data is packed into the APCI low byte,
+        // so no extra bytes are needed. Large data requires additional bytes after the APCI low byte.
+        bool smallData = dataLen == 0
+            || (EventType != GroupEventType.ValueRead && dataLen == 1 && (Value.Value[0] & 0xC0) == 0);
+        return FixedHeaderBytes + (smallData ? 0 : dataLen);
     }
 
     public void Encode(BinaryWriter writer)
@@ -76,7 +76,7 @@ public class CemiLDataFrame : IPacket
             _ => throw new InvalidOperationException($"Unsupported GroupEventType: {EventType}")
         };
 
-        byte apciLow = (byte)(apci & 0x3F);
+        byte apciLow = (byte)(apci & 0xC0); // preserve service-type bits [7:6]; low 6 bits come from small data below
         if (smallData && EventType != GroupEventType.ValueRead && Value.Value.Length == 1)
             apciLow |= (byte)(Value.Value[0] & 0x3F);
 
