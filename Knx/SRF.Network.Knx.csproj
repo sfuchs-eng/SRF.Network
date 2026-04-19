@@ -18,8 +18,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Misc\SRF.Network.Misc.csproj" />
+    <ProjectReference Include="..\Subs\SRF.Industrial\Packets\SRF.Industrial.Packets.csproj" />
     <ProjectReference Include="..\Subs\SRF.Knx\SRF.Knx.Core\SRF.Knx.Core.csproj" />
     <ProjectReference Include="..\Subs\SRF.Knx\SRF.Knx.Config\SRF.Knx.Config.csproj" />
+    <ProjectReference Include="..\Udp\SRF.Network.Udp.csproj" />
   </ItemGroup>
 
 </Project>

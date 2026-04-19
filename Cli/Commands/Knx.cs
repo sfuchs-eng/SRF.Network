@@ -95,7 +95,7 @@ public class Knx : HostLauncher<Knx.Worker>
                     Console.WriteLine("Listening to all group addresses...");
                 }
 
-                await knxConnection.ConnectAsync();
+                await knxConnection.ConnectAsync(stoppingToken);
                 knxConnection.MessageReceived += KnxMessageReceivedHandler;
                 while (!stoppingToken.IsCancellationRequested)
                 {

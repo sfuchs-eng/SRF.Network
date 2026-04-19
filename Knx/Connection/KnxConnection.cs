@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SRF.Knx.Core;
 using SRF.Network.Knx.Messages;
 
 namespace SRF.Network.Knx.Connection;
@@ -14,6 +15,7 @@ public class KnxConnection : IKnxConnection
     private readonly ILogger<KnxConnection> logger;
     private readonly IKnxBus knxBus;
     private readonly TimeProvider _timeProvider;
+    private readonly IDptResolver _dptResolver;
 
     public bool IsConnected { get => knxBus.IsConnected; }
 
@@ -28,17 +30,20 @@ public class KnxConnection : IKnxConnection
     /// <param name="options">The KNX configuration options.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="timeProvider">The time provider instance.</param>
+    /// <param name="dptResolver">Resolves the Data Point Type for incoming group addresses to enable payload decoding.</param>
     public KnxConnection(
         IKnxLibraryInitialization knxLibInitializer,
         IKnxBus knxBus,
         IOptions<KnxConfiguration> options,
         ILogger<KnxConnection> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IDptResolver dptResolver)
     {
         this.config = options.Value;
         this.logger = logger;
         this.knxBus = knxBus;
         this._timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        this._dptResolver  = dptResolver  ?? throw new ArgumentNullException(nameof(dptResolver));
 
         /* with Falcon... which is meanwhile removed and put into a separate package/project.
         if (config.CommSecurity.UseCommSecurity)
@@ -62,11 +67,11 @@ public class KnxConnection : IKnxConnection
         knxBus.ConnectionStateChanged += (s, e) => { OnConnectionStatusChanged(e); };
     }
 
-    public async Task ConnectAsync()
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
         {
-            await knxBus.ConnectAsync();
+            await knxBus.ConnectAsync(cancellationToken);
             if (knxBus.ConnectionState == BusConnectionState.Connected)
             {
                 logger.LogInformation("KNX bus connected.");
@@ -78,16 +83,18 @@ public class KnxConnection : IKnxConnection
         }
     }
 
-    public async Task DisconnectAsync()
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         knxBus.GroupMessageReceived -= OnGroupMessageReceived;
-        await Task.CompletedTask;
+        await knxBus.DisconnectAsync(cancellationToken);
         //knxBus.IoTGroupMessageReceived -= OnIoTGroupMessageReceived;
     }
 
     public async Task SendMessageAsync(IKnxMessage message, CancellationToken token)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(message);
+
+        await knxBus.SendGroupMessageAsync(message, token);
     }
 
     protected virtual void OnConnectionStatusChanged(Knx.KnxConnectionEventArgs e)
@@ -103,6 +110,18 @@ public class KnxConnection : IKnxConnection
         try
         {
             var ctx = new KnxMessageContext(e, _timeProvider.GetUtcNow());
+
+            try
+            {
+                var dpt = _dptResolver.GetDpt(e.DestinationAddress);
+                ctx.Dpt          = dpt;
+                ctx.DecodedValue = dpt.ToValue(e.Value);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to decode DPT value for group address {GroupAddress}.", e.DestinationAddress);
+            }
+
             MessageReceived?.Invoke(this, new KnxMessageReceivedEventArgs(ctx));
         }
         catch (Exception ex)

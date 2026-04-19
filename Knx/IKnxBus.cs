@@ -24,7 +24,14 @@ public interface IKnxBus
 
     event EventHandler<GroupEventArgs> GroupMessageReceived;
 
-    Task ConnectAsync();
+    Task ConnectAsync(CancellationToken cancellationToken = default);
 
-    Task DisconnectAsync();
+    Task DisconnectAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends a KNX group message (Read, Write, or Response) onto the bus.
+    /// </summary>
+    /// <param name="message">The message to send. Source address is derived from the bus configuration.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    Task SendGroupMessageAsync(IKnxMessage message, CancellationToken cancellationToken = default);
 }

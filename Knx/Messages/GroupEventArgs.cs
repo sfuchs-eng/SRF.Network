@@ -10,7 +10,7 @@ public class GroupEventArgs : EventArgs
     public required GroupEventType EventType { get; init; }
     // HopCount
     // IsSecure
-    // MessagePriority
+    public MessagePriority? Priority { get; init; } = MessagePriority.Low;
     public required IndividualAddress SourceAddress { get; init; }
     public required GroupValue Value { get; init; }
 }

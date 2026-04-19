@@ -16,8 +16,8 @@ public interface IKnxConnection
 {
     event EventHandler<KnxConnectionEventArgs>? ConnectionStatusChanged;
     event EventHandler<KnxMessageReceivedEventArgs> MessageReceived;
-    Task ConnectAsync();
-    Task DisconnectAsync();
+    Task ConnectAsync(CancellationToken cancellationToken = default);
+    Task DisconnectAsync(CancellationToken cancellationToken = default);
     Task SendMessageAsync(IKnxMessage message, CancellationToken token);
     bool IsConnected { get; }
 }

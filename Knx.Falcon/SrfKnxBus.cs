@@ -16,7 +16,6 @@ public class SrfKnxBus : IKnxBus
         _knxBus = knxBus ?? throw new ArgumentNullException(nameof(knxBus));
         _knxBus.ConnectionStateChanged += OnConnectionStateChanged;
         _knxBus.GroupMessageReceived += OnGroupMessageReceived;
-        _knxBus.GroupMessageReceived += OnGroupMessageReceived;
     }
 
     public event EventHandler<GroupEventArgs>? GroupMessageReceived;
@@ -36,15 +35,46 @@ public class SrfKnxBus : IKnxBus
         _ => throw new InvalidOperationException($"Unknown connection state: {_knxBus.ConnectionState}")
     };
 
-    public Task ConnectAsync()
+    public Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        return _knxBus.ConnectAsync();
+        return _knxBus.ConnectAsync(cancellationToken);
     }
 
-    public Task DisconnectAsync()
+    public Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Disconnecting from KNX bus...");
         return Task.CompletedTask;
+    }
+
+    public async Task SendGroupMessageAsync(IKnxMessage message, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        var destination = new F.GroupAddress(message.DestinationAddress.Address);
+        var value = new F.GroupValue(message.Value.Value);
+        var priority = message.Priority switch
+        {
+            MessagePriority.System => F.MessagePriority.System,
+            MessagePriority.Normal => F.MessagePriority.High,
+            MessagePriority.Alarm  => F.MessagePriority.Alarm,
+            MessagePriority.Low    => F.MessagePriority.Low,
+            _                      => F.MessagePriority.Low,
+        };
+
+        switch (message.EventType)
+        {
+            case GroupEventType.ValueWrite:
+                await _knxBus.WriteGroupValueAsync(destination, value, priority, cancellationToken);
+                break;
+            case GroupEventType.ValueRead:
+                await _knxBus.RequestGroupValueAsync(destination, priority, cancellationToken);
+                break;
+            case GroupEventType.ValueResponse:
+                await _knxBus.RespondGroupValueAsync(destination, value, priority, cancellationToken);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported GroupEventType: {message.EventType}");
+        }
     }
 
     private void OnConnectionStateChanged(object? sender, EventArgs e)
