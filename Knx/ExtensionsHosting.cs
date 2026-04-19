@@ -96,14 +96,18 @@ public static class ExtensionsHosting
         services.AddUdpMulticastWithConnectionManager(name, configSection);
         services.AddKnx<KnxConnection>();
 
+        services.AddOptions<KnxIpRoutingOptions>()
+            .BindConfiguration(KnxIpRoutingOptions.DefaultConfigSectionName);
+
         services.AddSingleton<IKnxBus>(sp =>
         {
             var udpClient    = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
             var udpQueue     = sp.GetRequiredKeyedService<IUdpMessageQueue>(name);
             var options      = sp.GetRequiredService<IOptions<KnxConfiguration>>();
+            var routingOpts  = sp.GetRequiredService<IOptions<KnxIpRoutingOptions>>();
             var logger       = sp.GetRequiredService<ILogger<KnxIpRoutingBus>>();
             var timeProvider = sp.GetRequiredService<TimeProvider>();
-            return new KnxIpRoutingBus(udpClient, udpQueue, options, logger, timeProvider);
+            return new KnxIpRoutingBus(udpClient, udpQueue, options, routingOpts, logger, timeProvider);
         });
 
         return services;

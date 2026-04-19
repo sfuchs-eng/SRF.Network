@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using MsFakeTimeProvider = Microsoft.Extensions.Time.Testing.FakeTimeProvider;
 using NSubstitute;
 using SRF.Knx.Config;
 using SRF.Knx.Core;
@@ -112,11 +113,13 @@ public class KnxIpRoutingBusTests
 
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
+        var zeroRateOptions = Options.Create(new KnxIpRoutingOptions { AverageTelegramBits = 0 });
 
         _bus = new KnxIpRoutingBus(
             _udpClient,
             _udpQueue,
             options,
+            zeroRateOptions,
             NullLogger<KnxIpRoutingBus>.Instance,
             _timeProvider);
 
@@ -137,7 +140,7 @@ public class KnxIpRoutingBusTests
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration());
         Assert.Throws<ArgumentNullException>(() =>
-            new KnxIpRoutingBus(null!, _udpQueue, options, NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
+            new KnxIpRoutingBus(null!, _udpQueue, options, Options.Create(new KnxIpRoutingOptions()), NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
     }
 
     [Test]
@@ -146,7 +149,7 @@ public class KnxIpRoutingBusTests
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration());
         Assert.Throws<ArgumentNullException>(() =>
-            new KnxIpRoutingBus(_udpClient, null!, options, NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
+            new KnxIpRoutingBus(_udpClient, null!, options, Options.Create(new KnxIpRoutingOptions()), NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
     }
 
     // ---- Connection state ----
@@ -475,6 +478,7 @@ public class KnxIpRoutingBusTests
         options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting" });
         var busNoAddress = new KnxIpRoutingBus(
             _udpClient, _udpQueue, options,
+            Options.Create(new KnxIpRoutingOptions { AverageTelegramBits = 0 }),
             NullLogger<KnxIpRoutingBus>.Instance, _timeProvider);
         await busNoAddress.ConnectAsync();
 
@@ -500,5 +504,138 @@ public class KnxIpRoutingBusTests
         _udpClient.ConnectionStatusChanged += Raise.EventWith(new UdpConnectionEventArgs(true));
 
         Assert.That(captured, Is.Not.Null);
+    }
+
+    // ---- Priority coverage: Normal and System ----
+
+    [Test]
+    public async Task SendGroupMessageAsync_PriorityNormal_EncodesCorrectCtrl1Bits()
+    {
+        var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]), MessagePriority.Normal);
+        byte[]? enqueuedBytes = null;
+        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
+            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+
+        await _bus.SendGroupMessageAsync(msg);
+
+        Assert.That(enqueuedBytes![8] & 0x0C, Is.EqualTo((int)MessagePriority.Normal << 2));
+    }
+
+    [Test]
+    public async Task SendGroupMessageAsync_PrioritySystem_EncodesCorrectCtrl1Bits()
+    {
+        var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]), MessagePriority.System);
+        byte[]? enqueuedBytes = null;
+        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
+            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+
+        await _bus.SendGroupMessageAsync(msg);
+
+        Assert.That(enqueuedBytes![8] & 0x0C, Is.EqualTo((int)MessagePriority.System << 2));
+    }
+
+    [Test]
+    public void ReceivePath_PriorityNormal_DecodedInGroupEventArgs()
+    {
+        byte ctrl1 = (byte)((0xBC & ~0x0C) | ((int)MessagePriority.Normal << 2));
+        var rawBytes = BuildRoutingFrame(0x0001, 0x0001, GroupEventType.ValueWrite, [0x01], ctrl1);
+
+        KnxMessageReceivedEventArgs? captured = null;
+        _bus.MessageReceived += (_, e) => captured = e;
+
+        _udpClient.MessageReceived += Raise.EventWith(
+            new UdpMessageReceivedEventArgs(rawBytes, DummyEndpoint, DateTimeOffset.UtcNow));
+
+        Assert.That(captured!.KnxMessageContext.GroupEventArgs!.Priority, Is.EqualTo(MessagePriority.Normal));
+    }
+
+    [Test]
+    public void ReceivePath_PrioritySystem_DecodedInGroupEventArgs()
+    {
+        byte ctrl1 = (byte)((0xBC & ~0x0C) | ((int)MessagePriority.System << 2));
+        var rawBytes = BuildRoutingFrame(0x0001, 0x0001, GroupEventType.ValueWrite, [0x01], ctrl1);
+
+        KnxMessageReceivedEventArgs? captured = null;
+        _bus.MessageReceived += (_, e) => captured = e;
+
+        _udpClient.MessageReceived += Raise.EventWith(
+            new UdpMessageReceivedEventArgs(rawBytes, DummyEndpoint, DateTimeOffset.UtcNow));
+
+        Assert.That(captured!.KnxMessageContext.GroupEventArgs!.Priority, Is.EqualTo(MessagePriority.System));
+    }
+
+    // ---- High-load ----
+
+    [Test]
+    public async Task SendGroupMessageAsync_MultipleRapidSends_AllEnqueued()
+    {
+        const int count = 10;
+        var tasks = Enumerable.Range(0, count)
+            .Select(i => _bus.SendGroupMessageAsync(
+                GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([(byte)(i & 0x3F)]))));
+
+        await Task.WhenAll(tasks);
+
+        _udpQueue.Received(count).Enqueue(Arg.Any<byte[]>());
+    }
+
+    // ---- Large data encoding ----
+
+    [Test]
+    public async Task SendGroupMessageAsync_FourByteValue_EncodedAsSeparateDataBytes()
+    {
+        var value = new byte[] { 0x00, 0x00, 0x01, 0xF4 };
+        var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue(value));
+        byte[]? enqueuedBytes = null;
+        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
+            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+
+        await _bus.SendGroupMessageAsync(msg);
+
+        // KNX/IP header (6) + cEMI fixed (11) + 4 data bytes = 21 bytes total
+        Assert.That(enqueuedBytes, Is.Not.Null);
+        Assert.That(enqueuedBytes!.Length, Is.EqualTo(21));
+        // Data bytes follow after the APCI low byte (index 16): indices 17..20
+        Assert.That(enqueuedBytes[17..21], Is.EqualTo(value));
+    }
+
+    // ---- Rate limiting integration ----
+
+    [Test]
+    public async Task ReceivePath_NotifyReceived_DelaysNextSend()
+    {
+        // Use a real FakeTimeProvider that drives Task.Delay via CreateTimer
+        var msFake = new MsFakeTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var knxOpts = Substitute.For<IOptions<KnxConfiguration>>();
+        knxOpts.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
+        var interval = new KnxIpRoutingOptions().MinTelegramInterval; // ~20.83 ms
+
+        var bus = new KnxIpRoutingBus(
+            _udpClient, _udpQueue, knxOpts,
+            Options.Create(new KnxIpRoutingOptions()),
+            NullLogger<KnxIpRoutingBus>.Instance,
+            msFake);
+        await bus.ConnectAsync();
+
+        // Simulate an incoming telegram — this records a bus event
+        var rawBytes = BuildRoutingFrame(
+            srcAddr: new IndividualAddress("2.1.1").Address,
+            dstAddr: new GroupAddress("0/0/1").Address,
+            eventType: GroupEventType.ValueWrite,
+            value: [0x01]);
+        _udpClient.MessageReceived += Raise.EventWith(
+            new UdpMessageReceivedEventArgs(rawBytes, DummyEndpoint, DateTimeOffset.UtcNow));
+
+        // Immediately try to send — should be delayed because the receive just happened
+        var sendTask = bus.SendGroupMessageAsync(
+            GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01])));
+
+        Assert.That(sendTask.IsCompleted, Is.False, "Send must be delayed after a received telegram");
+
+        // Advance past the minimum interval — send should now complete
+        msFake.Advance(interval * 2);
+        await sendTask;
+
+        _udpQueue.Received(1).Enqueue(Arg.Any<byte[]>());
     }
 }

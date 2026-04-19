@@ -2,8 +2,10 @@
 
 ## KNX Group Messages receiving/sending
 
-- [ ] Check whether sending Group Message is done via SRF.Network.Udp.IUdpMessageQueue and whether a there's a queue processor in the AddKnx... hosting extion methods.
-- [ ] Check whether receiving Group Messages is done via SRF.Network.Udp.IUdpMulticastClient and whether there's a background service in the AddKnx... hosting extension methods that listens to the multicast group and raises the KnxBus.GroupMessageReceived event.
-- [ ] Add rate limiting to the send queue to avoid flooding the bus in case of a misbehaving consumer. This can be done via a simple timer that allows sending one message per configured interval (e.g. 100ms) and drops or delays messages that exceed this rate. Ensure received telegrams contribute to the total bus rate / load calculation and rate limiting (combined send/read rate limiting whereas read cannot be influenced).
-- [ ] Add unit tests for sending and receiving group messages, including edge cases like invalid messages, high load, and connection issues.
-- [ ] Add integration tests that use a real or simulated KNX/IP routing connection to verify end-to-end functionality of sending and receiving group messages.
+- [x] Check whether sending Group Message is done via SRF.Network.Udp.IUdpMessageQueue and whether a there's a queue processor in the AddKnx... hosting extion methods.
+- [ ] Check whether receiving Group Messages is done via SRF.Network.Udp.IUdpMulticastClient and whether there's a background service in the AddKnx... hosting extension methods that listens to the multicast group and raises the related events of SRF.Network.Udp.IUdpMessageQueue.
+- [x] Add rate limiting to the send queue to avoid flooding the bus in case of a misbehaving consumer. This can be done via a simple timer that allows sending one message per configured interval (e.g. 100ms) and drops or delays messages that exceed this rate. Ensure received telegrams contribute to the total bus rate / load calculation and rate limiting (combined send/read rate limiting whereas read cannot be influenced).
+- [x] Add unit tests for sending and receiving group messages, including edge cases like invalid messages, high load, and connection issues.
+- [x] Add integration tests that use a real or simulated KNX/IP routing connection to verify end-to-end functionality of sending and receiving group messages.
+- [ ] The KnxBusRateLimiter must become more sophisticated. A received telegram does not mean the bus is busy because it is through already. Sending must be limited to a certain rate, allowing a small burst of messages, but then enforcing a cooldown period. Received telegrams should contribute to the bus load calculation and rate limiting, but should not directly block sending. Instead, the rate limiter should track the overall bus load and adjust sending behavior accordingly, allowing for more intelligent handling of high traffic scenarios.
+- [ ] KnxIpRoutingOptions should be incorporated into ... (SRF.Network.Knx options) as RateLimitingOptions applicable to any type of KNX bus implementation.

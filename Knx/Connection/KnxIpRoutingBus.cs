@@ -26,6 +26,7 @@ public class KnxIpRoutingBus : IKnxBus
     private readonly IndividualAddress _localAddress;
     private readonly KnxIpRoutingPayloadProvider _payloadProvider = new();
     private readonly TimeProvider _timeProvider;
+    private readonly KnxBusRateLimiter _rateLimiter;
 
     /// <summary>
     /// Initializes a new instance of <see cref="KnxIpRoutingBus"/>.
@@ -34,6 +35,7 @@ public class KnxIpRoutingBus : IKnxBus
         IUdpMulticastClient udpClient,
         IUdpMessageQueue udpQueue,
         IOptions<KnxConfiguration> options,
+        IOptions<KnxIpRoutingOptions> routingOptions,
         ILogger<KnxIpRoutingBus> logger,
         TimeProvider timeProvider)
     {
@@ -43,6 +45,9 @@ public class KnxIpRoutingBus : IKnxBus
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
         _localAddress = ParseKnxAddress(options?.Value?.ConnectionString);
+        _rateLimiter  = new KnxBusRateLimiter(
+            routingOptions?.Value ?? new KnxIpRoutingOptions(),
+            timeProvider);
 
         _udpClient.ConnectionStatusChanged += OnUdpConnectionStatusChanged;
     }
@@ -76,9 +81,11 @@ public class KnxIpRoutingBus : IKnxBus
     }
 
     /// <inheritdoc/>
-    public Task SendGroupMessageAsync(IKnxMessage message, CancellationToken cancellationToken = default)
+    public async Task SendGroupMessageAsync(IKnxMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
+
+        await _rateLimiter.WaitForSendSlotAsync(cancellationToken).ConfigureAwait(false);
 
         // Encode priority into Ctrl1 bits [3:2] — KNX wire encoding matches MessagePriority values exactly.
         byte ctrl1 = (byte)((0xBC & ~0x0C) | ((int)message.Priority << 2));
@@ -107,8 +114,6 @@ public class KnxIpRoutingBus : IKnxBus
 
         _logger.LogTrace("Enqueued KNX group message: {EventType} → {DestinationAddress} ({ValueHex})",
             message.EventType, message.DestinationAddress, Convert.ToHexString(message.Value.Value));
-
-        return Task.CompletedTask;
     }
 
     private void OnUdpMessageReceived(object? sender, UdpMessageReceivedEventArgs e)
@@ -139,6 +144,7 @@ public class KnxIpRoutingBus : IKnxBus
             _logger.LogTrace("Received KNX group message: {EventType} ← {SourceAddress} → {DestinationAddress} ({ValueHex})",
                 frame.EventType, frame.SourceAddress, frame.DestinationAddress, Convert.ToHexString(frame.Value.Value));
 
+            _rateLimiter.NotifyReceived();
             MessageReceived.Invoke(this, new KnxMessageReceivedEventArgs(groupEventArgs, _timeProvider.GetUtcNow()));
         }
         catch (Exception ex)
