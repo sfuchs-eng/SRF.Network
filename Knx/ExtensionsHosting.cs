@@ -98,11 +98,12 @@ public static class ExtensionsHosting
 
         services.AddSingleton<IKnxBus>(sp =>
         {
-            var udpClient = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
-            var udpQueue  = sp.GetRequiredKeyedService<IUdpMessageQueue>(name);
-            var options   = sp.GetRequiredService<IOptions<KnxConfiguration>>();
-            var logger    = sp.GetRequiredService<ILogger<KnxIpRoutingBus>>();
-            return new KnxIpRoutingBus(udpClient, udpQueue, options, logger);
+            var udpClient    = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
+            var udpQueue     = sp.GetRequiredKeyedService<IUdpMessageQueue>(name);
+            var options      = sp.GetRequiredService<IOptions<KnxConfiguration>>();
+            var logger       = sp.GetRequiredService<ILogger<KnxIpRoutingBus>>();
+            var timeProvider = sp.GetRequiredService<TimeProvider>();
+            return new KnxIpRoutingBus(udpClient, udpQueue, options, logger, timeProvider);
         });
 
         return services;

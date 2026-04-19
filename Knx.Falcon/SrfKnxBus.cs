@@ -9,16 +9,16 @@ public class SrfKnxBus : IKnxBus
 {
     private readonly FSDK.KnxBus _knxBus;
     private readonly ILogger<SrfKnxBus> _logger;
+    private readonly TimeProvider _timeProvider;
 
-    public SrfKnxBus(FSDK.KnxBus knxBus, ILogger<SrfKnxBus> logger)
+    public SrfKnxBus(FSDK.KnxBus knxBus, ILogger<SrfKnxBus> logger, TimeProvider timeProvider)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _knxBus = knxBus ?? throw new ArgumentNullException(nameof(knxBus));
+        _logger       = logger       ?? throw new ArgumentNullException(nameof(logger));
+        _knxBus       = knxBus       ?? throw new ArgumentNullException(nameof(knxBus));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _knxBus.ConnectionStateChanged += OnConnectionStateChanged;
         _knxBus.GroupMessageReceived += OnGroupMessageReceived;
     }
-
-    public event EventHandler<GroupEventArgs>? GroupMessageReceived;
 
     public bool IsConnected => _knxBus.ConnectionState == F.BusConnectionState.Connected;
 
@@ -98,6 +98,6 @@ public class SrfKnxBus : IKnxBus
             DestinationAddress = new SRF.Knx.Core.GroupAddress(e.DestinationAddress.Address),
             Value = new SRF.Knx.Core.GroupValue(e.Value.Value)
         };
-        GroupMessageReceived?.Invoke(sender, groupEventArgs);
+        MessageReceived?.Invoke(sender, new KnxMessageReceivedEventArgs(groupEventArgs, _timeProvider.GetUtcNow()));
     }
 }

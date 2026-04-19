@@ -16,13 +16,11 @@ public interface IKnxBus
 {
     bool IsConnected { get; }
 
-    event EventHandler<KnxConnectionEventArgs>? ConnectionStateChanged;
+    event EventHandler<KnxConnectionEventArgs> ConnectionStateChanged;
 
-    event EventHandler<KnxMessageReceivedEventArgs>? MessageReceived;
+    event EventHandler<KnxMessageReceivedEventArgs> MessageReceived;
 
     BusConnectionState ConnectionState { get; }
-
-    event EventHandler<GroupEventArgs> GroupMessageReceived;
 
     Task ConnectAsync(CancellationToken cancellationToken = default);
 

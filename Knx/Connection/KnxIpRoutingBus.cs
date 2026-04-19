@@ -25,6 +25,7 @@ public class KnxIpRoutingBus : IKnxBus
     private readonly ILogger<KnxIpRoutingBus> _logger;
     private readonly IndividualAddress _localAddress;
     private readonly KnxIpRoutingPayloadProvider _payloadProvider = new();
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="KnxIpRoutingBus"/>.
@@ -33,11 +34,13 @@ public class KnxIpRoutingBus : IKnxBus
         IUdpMulticastClient udpClient,
         IUdpMessageQueue udpQueue,
         IOptions<KnxConfiguration> options,
-        ILogger<KnxIpRoutingBus> logger)
+        ILogger<KnxIpRoutingBus> logger,
+        TimeProvider timeProvider)
     {
-        _udpClient = udpClient ?? throw new ArgumentNullException(nameof(udpClient));
-        _udpQueue  = udpQueue  ?? throw new ArgumentNullException(nameof(udpQueue));
-        _logger    = logger    ?? throw new ArgumentNullException(nameof(logger));
+        _udpClient    = udpClient    ?? throw new ArgumentNullException(nameof(udpClient));
+        _udpQueue     = udpQueue     ?? throw new ArgumentNullException(nameof(udpQueue));
+        _logger       = logger       ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
 
         _localAddress = ParseKnxAddress(options?.Value?.ConnectionString);
 
@@ -52,12 +55,9 @@ public class KnxIpRoutingBus : IKnxBus
         _udpClient.IsConnected ? BusConnectionState.Connected : BusConnectionState.Closed;
 
     /// <inheritdoc/>
-    public event EventHandler<Knx.KnxConnectionEventArgs>? ConnectionStateChanged;
+    public event EventHandler<Knx.KnxConnectionEventArgs> ConnectionStateChanged = delegate { };
     /// <inheritdoc/>
-    public event EventHandler<KnxMessageReceivedEventArgs>? MessageReceived;
-
-    /// <inheritdoc/>
-    public event EventHandler<GroupEventArgs> GroupMessageReceived = delegate { };
+    public event EventHandler<KnxMessageReceivedEventArgs> MessageReceived = delegate { };
 
     /// <inheritdoc/>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -139,7 +139,7 @@ public class KnxIpRoutingBus : IKnxBus
             _logger.LogTrace("Received KNX group message: {EventType} ← {SourceAddress} → {DestinationAddress} ({ValueHex})",
                 frame.EventType, frame.SourceAddress, frame.DestinationAddress, Convert.ToHexString(frame.Value.Value));
 
-            GroupMessageReceived.Invoke(this, groupEventArgs);
+            MessageReceived.Invoke(this, new KnxMessageReceivedEventArgs(groupEventArgs, _timeProvider.GetUtcNow()));
         }
         catch (Exception ex)
         {

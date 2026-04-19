@@ -14,7 +14,6 @@ public class KnxConnection : IKnxConnection
     private readonly KnxConfiguration config;
     private readonly ILogger<KnxConnection> logger;
     private readonly IKnxBus knxBus;
-    private readonly TimeProvider _timeProvider;
     private readonly IDptResolver _dptResolver;
 
     public bool IsConnected { get => knxBus.IsConnected; }
@@ -29,20 +28,17 @@ public class KnxConnection : IKnxConnection
     /// <param name="knxBus">The KNX bus instance.</param>
     /// <param name="options">The KNX configuration options.</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="timeProvider">The time provider instance.</param>
     /// <param name="dptResolver">Resolves the Data Point Type for incoming group addresses to enable payload decoding.</param>
     public KnxConnection(
         IKnxLibraryInitialization knxLibInitializer,
         IKnxBus knxBus,
         IOptions<KnxConfiguration> options,
         ILogger<KnxConnection> logger,
-        TimeProvider timeProvider,
         IDptResolver dptResolver)
     {
         this.config = options.Value;
         this.logger = logger;
         this.knxBus = knxBus;
-        this._timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         this._dptResolver  = dptResolver  ?? throw new ArgumentNullException(nameof(dptResolver));
 
         /* with Falcon... which is meanwhile removed and put into a separate package/project.
@@ -75,7 +71,7 @@ public class KnxConnection : IKnxConnection
             if (knxBus.ConnectionState == BusConnectionState.Connected)
             {
                 logger.LogInformation("KNX bus connected.");
-                knxBus.GroupMessageReceived += OnGroupMessageReceived;
+                knxBus.MessageReceived += OnBusMessageReceived;
                 //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
             }
             else
@@ -85,7 +81,7 @@ public class KnxConnection : IKnxConnection
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        knxBus.GroupMessageReceived -= OnGroupMessageReceived;
+        knxBus.MessageReceived -= OnBusMessageReceived;
         await knxBus.DisconnectAsync(cancellationToken);
         //knxBus.IoTGroupMessageReceived -= OnIoTGroupMessageReceived;
     }
@@ -105,30 +101,30 @@ public class KnxConnection : IKnxConnection
         });
     }
 
-    protected virtual void OnGroupMessageReceived(object? sender, GroupEventArgs e)
+    protected virtual void OnBusMessageReceived(object? sender, KnxMessageReceivedEventArgs e)
     {
         try
         {
-            var ctx = new KnxMessageContext(e, _timeProvider.GetUtcNow());
+            var ctx = e.KnxMessageContext;
 
             try
             {
-                var dpt = _dptResolver.GetDpt(e.DestinationAddress);
+                var dpt = _dptResolver.GetDpt(ctx.GroupEventArgs!.DestinationAddress);
                 ctx.Dpt          = dpt;
-                ctx.DecodedValue = dpt.ToValue(e.Value);
+                ctx.DecodedValue = dpt.ToValue(ctx.GroupEventArgs.Value);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to decode DPT value for group address {GroupAddress}.", e.DestinationAddress);
+                logger.LogWarning(ex, "Failed to decode DPT value for group address {GroupAddress}.", ctx.GroupEventArgs?.DestinationAddress);
             }
 
-            MessageReceived?.Invoke(this, new KnxMessageReceivedEventArgs(ctx));
+            MessageReceived?.Invoke(this, e);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to process KNX Group Message: {groupAddress} from {sourceAddress}",
-                e.DestinationAddress.ToString(),
-                e.SourceAddress.ToString());
+                e.KnxMessageContext.GroupEventArgs?.DestinationAddress?.ToString(),
+                e.KnxMessageContext.GroupEventArgs?.SourceAddress?.ToString());
         }
     }
 
