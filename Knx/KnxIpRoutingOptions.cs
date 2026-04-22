@@ -31,6 +31,46 @@ public class KnxIpRoutingOptions
     public int BusLineCount { get; set; } = 1;
 
     /// <summary>
+    /// Maximum number of consecutive outbound telegrams that can be sent in a burst before
+    /// the bus load is re-evaluated. Acts as the token bucket capacity.
+    /// <para>
+    /// When the bus is idle, tokens accumulate at one per <see cref="MinTelegramInterval"/> up to
+    /// this cap. Received telegrams contribute to the load window but do not consume tokens.
+    /// </para>
+    /// Default: <c>5</c>. Values ≤ 0 are treated as <c>1</c> (no burst, but rate limiting remains active).
+    /// </summary>
+    public int MaxBurstSize { get; set; } = 5;
+
+    /// <summary>
+    /// Bus load fraction (0–1) above which the rate limiter enters high-load mode and only
+    /// allows burst-token spending (no new token generation through waiting).
+    /// <para>
+    /// Load is measured over a sliding window of duration <see cref="LoadWindowDuration"/> as the
+    /// ratio of observed bus events (sends + receives) to the theoretical maximum.
+    /// </para>
+    /// Default: <c>0.5</c> (50 %). Set to <c>1.0</c> to disable high-load mode entirely.
+    /// </summary>
+    public double MaxContinuousBusLoad { get; set; } = 0.5;
+
+    /// <summary>
+    /// How long the cooldown period lasts after the burst token pool is exhausted under high load.
+    /// During cooldown, sends are rate-limited to <see cref="CooldownMaxBusLoad"/> of the bus
+    /// capacity to allow the bus to recover.
+    /// Default: <c>1 second</c>.
+    /// </summary>
+    public TimeSpan CooldownDuration { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Maximum bus load fraction (0–1) allowed during a cooldown period.
+    /// Outbound sends are spaced at <c>MinTelegramInterval / CooldownMaxBusLoad</c> apart.
+    /// <para>
+    /// Set to <c>0</c> to completely pause sending during cooldown (until the cooldown expires).
+    /// </para>
+    /// Default: <c>0.2</c> (20 %).
+    /// </summary>
+    public double CooldownMaxBusLoad { get; set; } = 0.2;
+
+    /// <summary>
     /// Minimum interval between consecutive bus events (send or receive), computed from the
     /// physical bus parameters.
     /// <para>
@@ -45,4 +85,14 @@ public class KnxIpRoutingOptions
         AverageTelegramBits <= 0 || BusBitRate <= 0 || BusLineCount <= 0
             ? TimeSpan.Zero
             : TimeSpan.FromSeconds(AverageTelegramBits / (double)(BusBitRate * BusLineCount));
+
+    /// <summary>
+    /// Duration of the sliding window used to compute the current bus load.
+    /// Computed as <c>max(MaxBurstSize, 1) × MinTelegramInterval</c>.
+    /// Returns <see cref="TimeSpan.Zero"/> when rate limiting is disabled.
+    /// </summary>
+    public TimeSpan LoadWindowDuration =>
+        MinTelegramInterval == TimeSpan.Zero
+            ? TimeSpan.Zero
+            : TimeSpan.FromTicks(Math.Max(MaxBurstSize, 1) * MinTelegramInterval.Ticks);
 }
