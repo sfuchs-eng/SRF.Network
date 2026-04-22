@@ -7,6 +7,8 @@ using SRF.Knx.Config;
 using SRF.Knx.Core;
 using SRF.Network.Knx.Connection;
 using SRF.Network.Knx.Dpt;
+using SRF.Network.Knx.Hosting;
+using SRF.Network.Knx.IpRouting;
 using SRF.Network.Misc;
 using SRF.Network.Udp;
 using SRF.Network.Udp.Hosting;
@@ -99,15 +101,34 @@ public static class ExtensionsHosting
         services.AddOptions<KnxIpRoutingOptions>()
             .BindConfiguration(KnxIpRoutingOptions.DefaultConfigSectionName);
 
+        // KnxIpRoutingQueue: concrete singleton (for KnxIpRoutingSender) + interface (for consumers)
+        services.AddKeyedSingleton<KnxIpRoutingQueue>(name, (sp, _) =>
+        {
+            var routingOpts  = sp.GetRequiredService<IOptions<KnxIpRoutingOptions>>();
+            var timeProvider = sp.GetRequiredService<TimeProvider>();
+            return new KnxIpRoutingQueue(routingOpts.Value, timeProvider);
+        });
+        services.AddKeyedSingleton<IKnxIpRoutingQueue>(
+            name, (sp, _) => sp.GetRequiredKeyedService<KnxIpRoutingQueue>(name));
+
+        // KnxIpRoutingSender: background service that drains the queue with rate limiting
+        services.AddHostedService(sp =>
+        {
+            var queue      = sp.GetRequiredKeyedService<KnxIpRoutingQueue>(name);
+            var udpClient  = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
+            var logger     = sp.GetRequiredService<ILogger<KnxIpRoutingSender>>();
+            return new KnxIpRoutingSender(name, queue, udpClient, logger);
+        });
+
         services.AddSingleton<IKnxBus>(sp =>
         {
             var udpClient    = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
-            var udpQueue     = sp.GetRequiredKeyedService<IUdpMessageQueue>(name);
+            var sendQueue    = sp.GetRequiredKeyedService<IKnxIpRoutingQueue>(name);
             var options      = sp.GetRequiredService<IOptions<KnxConfiguration>>();
             var routingOpts  = sp.GetRequiredService<IOptions<KnxIpRoutingOptions>>();
             var logger       = sp.GetRequiredService<ILogger<KnxIpRoutingBus>>();
             var timeProvider = sp.GetRequiredService<TimeProvider>();
-            return new KnxIpRoutingBus(udpClient, udpQueue, options, routingOpts, logger, timeProvider);
+            return new KnxIpRoutingBus(udpClient, sendQueue, options, routingOpts, logger, timeProvider);
         });
 
         return services;

@@ -1,7 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using MsFakeTimeProvider = Microsoft.Extensions.Time.Testing.FakeTimeProvider;
 using NSubstitute;
 using SRF.Knx.Config;
 using SRF.Knx.Core;
@@ -19,7 +18,7 @@ namespace SRF.Network.Test.Knx;
 public class KnxIpRoutingBusTests
 {
     private IUdpMulticastClient _udpClient = null!;
-    private IUdpMessageQueue _udpQueue = null!;
+    private IKnxIpRoutingQueue _sendQueue = null!;
     private FakeTimeProvider _timeProvider = null!;
     private KnxIpRoutingBus _bus = null!;
     private static readonly IPEndPoint DummyEndpoint = new(IPAddress.Parse("224.0.23.12"), 3671);
@@ -95,29 +94,24 @@ public class KnxIpRoutingBusTests
         return ms.ToArray();
     }
 
-    private static UdpQueueItem MakeQueueItem(byte[] data) =>
-        new(data, DateTimeOffset.UtcNow);
-
     [SetUp]
     public async Task SetUp()
     {
         _udpClient = Substitute.For<IUdpMulticastClient>();
-        _udpQueue = Substitute.For<IUdpMessageQueue>();
+        _sendQueue = Substitute.For<IKnxIpRoutingQueue>();
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
 
         _udpClient.IsConnected.Returns(false);
         _udpClient.ConnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _udpClient.DisconnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        _udpQueue.Enqueue(Arg.Any<byte[]>())
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
 
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
-        var zeroRateOptions = Options.Create(new KnxIpRoutingOptions { AverageTelegramBits = 0 });
+        var zeroRateOptions = Options.Create(new KnxIpRoutingOptions { BusBitRate = 0 });
 
         _bus = new KnxIpRoutingBus(
             _udpClient,
-            _udpQueue,
+            _sendQueue,
             options,
             zeroRateOptions,
             NullLogger<KnxIpRoutingBus>.Instance,
@@ -140,7 +134,7 @@ public class KnxIpRoutingBusTests
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration());
         Assert.Throws<ArgumentNullException>(() =>
-            new KnxIpRoutingBus(null!, _udpQueue, options, Options.Create(new KnxIpRoutingOptions()), NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
+            new KnxIpRoutingBus(null!, _sendQueue, options, Options.Create(new KnxIpRoutingOptions()), NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
     }
 
     [Test]
@@ -222,11 +216,11 @@ public class KnxIpRoutingBusTests
     }
 
     [Test]
-    public async Task SendGroupMessageAsync_EnqueuesBytesOnUdpQueue()
+    public async Task SendGroupMessageAsync_EnqueuesBytesOnSendQueue()
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]));
         await _bus.SendGroupMessageAsync(msg);
-        _udpQueue.Received(1).Enqueue(Arg.Any<byte[]>());
+        _sendQueue.Received(1).Enqueue(Arg.Any<byte[]>(), Arg.Any<int>());
     }
 
     [Test]
@@ -234,8 +228,8 @@ public class KnxIpRoutingBusTests
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]));
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -255,8 +249,8 @@ public class KnxIpRoutingBusTests
         var dest = new GroupAddress("5/6/7");
         var msg = GroupMessageRequest.Write(dest, new GroupValue([0x01]));
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -271,8 +265,8 @@ public class KnxIpRoutingBusTests
         var expectedSrc = new IndividualAddress("1.1.5");
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]));
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -286,8 +280,8 @@ public class KnxIpRoutingBusTests
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]), MessagePriority.Low);
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -299,8 +293,8 @@ public class KnxIpRoutingBusTests
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]), MessagePriority.Alarm);
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -477,19 +471,15 @@ public class KnxIpRoutingBusTests
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting" });
         var busNoAddress = new KnxIpRoutingBus(
-            _udpClient, _udpQueue, options,
-            Options.Create(new KnxIpRoutingOptions { AverageTelegramBits = 0 }),
+            _udpClient, _sendQueue, options,
+            Options.Create(new KnxIpRoutingOptions { BusBitRate = 0 }),
             NullLogger<KnxIpRoutingBus>.Instance, _timeProvider);
         await busNoAddress.ConnectAsync();
-
-        byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
 
         await busNoAddress.SendGroupMessageAsync(
             GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01])));
 
-        Assert.That(enqueuedBytes, Is.Not.Null);
+        _sendQueue.Received(1).Enqueue(Arg.Any<byte[]>(), Arg.Any<int>());
         // Just confirm it enqueued something without throwing
     }
 
@@ -513,8 +503,8 @@ public class KnxIpRoutingBusTests
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]), MessagePriority.Normal);
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -526,8 +516,8 @@ public class KnxIpRoutingBusTests
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01]), MessagePriority.System);
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -576,7 +566,7 @@ public class KnxIpRoutingBusTests
 
         await Task.WhenAll(tasks);
 
-        _udpQueue.Received(count).Enqueue(Arg.Any<byte[]>());
+        _sendQueue.Received(count).Enqueue(Arg.Any<byte[]>(), Arg.Any<int>());
     }
 
     // ---- Large data encoding ----
@@ -587,8 +577,8 @@ public class KnxIpRoutingBusTests
         var value = new byte[] { 0x00, 0x00, 0x01, 0xF4 };
         var msg = GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue(value));
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => MakeQueueItem((byte[])ci[0]));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _bus.SendGroupMessageAsync(msg);
 
@@ -599,25 +589,11 @@ public class KnxIpRoutingBusTests
         Assert.That(enqueuedBytes[17..21], Is.EqualTo(value));
     }
 
-    // ---- Rate limiting integration ----
+    // ---- Receive path notifies queue ----
 
     [Test]
-    public async Task ReceivePath_NotifyReceived_DelaysNextSend()
+    public void ReceivePath_UdpMessageReceived_CallsNotifyReceivedOnQueue()
     {
-        // Use a real FakeTimeProvider that drives Task.Delay via CreateTimer
-        var msFake = new MsFakeTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
-        var knxOpts = Substitute.For<IOptions<KnxConfiguration>>();
-        knxOpts.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
-        var interval = new KnxIpRoutingOptions().MinTelegramInterval; // ~20.83 ms
-
-        var bus = new KnxIpRoutingBus(
-            _udpClient, _udpQueue, knxOpts,
-            Options.Create(new KnxIpRoutingOptions()),
-            NullLogger<KnxIpRoutingBus>.Instance,
-            msFake);
-        await bus.ConnectAsync();
-
-        // Simulate an incoming telegram — this records a bus event
         var rawBytes = BuildRoutingFrame(
             srcAddr: new IndividualAddress("2.1.1").Address,
             dstAddr: new GroupAddress("0/0/1").Address,
@@ -626,16 +602,6 @@ public class KnxIpRoutingBusTests
         _udpClient.MessageReceived += Raise.EventWith(
             new UdpMessageReceivedEventArgs(rawBytes, DummyEndpoint, DateTimeOffset.UtcNow));
 
-        // Immediately try to send — should be delayed because the receive just happened
-        var sendTask = bus.SendGroupMessageAsync(
-            GroupMessageRequest.Write(new GroupAddress("0/0/1"), new GroupValue([0x01])));
-
-        Assert.That(sendTask.IsCompleted, Is.False, "Send must be delayed after a received telegram");
-
-        // Advance past the minimum interval — send should now complete
-        msFake.Advance(interval * 2);
-        await sendTask;
-
-        _udpQueue.Received(1).Enqueue(Arg.Any<byte[]>());
+        _sendQueue.Received(1).NotifyReceived(Arg.Any<int>());
     }
 }

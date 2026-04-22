@@ -26,7 +26,7 @@ namespace SRF.Network.Test.Knx;
 public class KnxConnectionIntegrationTests
 {
     private IUdpMulticastClient _udpClient = null!;
-    private IUdpMessageQueue _udpQueue = null!;
+    private IKnxIpRoutingQueue _sendQueue = null!;
     private IDptResolver _dptResolver = null!;
     private KnxConnection _connection = null!;
     private FakeTimeProvider _timeProvider = null!;
@@ -86,7 +86,6 @@ public class KnxConnectionIntegrationTests
     public async Task SetUp()
     {
         _udpClient   = Substitute.For<IUdpMulticastClient>();
-        _udpQueue    = Substitute.For<IUdpMessageQueue>();
         _dptResolver = Substitute.For<IDptResolver>();
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
 
@@ -98,15 +97,15 @@ public class KnxConnectionIntegrationTests
             .Returns(_ => { connected = true; return Task.CompletedTask; });
         _udpClient.DisconnectAsync(Arg.Any<CancellationToken>())
             .Returns(_ => { connected = false; return Task.CompletedTask; });
-        _udpQueue.Enqueue(Arg.Any<byte[]>())
-            .Returns(ci => new UdpQueueItem((byte[])ci[0], DateTimeOffset.UtcNow));
+
+        _sendQueue = Substitute.For<IKnxIpRoutingQueue>();
 
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
 
         var bus = new KnxIpRoutingBus(
-            _udpClient, _udpQueue, options,
-            Options.Create(new KnxIpRoutingOptions { AverageTelegramBits = 0 }),
+            _udpClient, _sendQueue, options,
+            Options.Create(new KnxIpRoutingOptions { BusBitRate = 0 }),
             NullLogger<KnxIpRoutingBus>.Instance, _timeProvider);
 
         _connection = new KnxConnection(
@@ -122,21 +121,19 @@ public class KnxConnectionIntegrationTests
     [TearDown]
     public void TearDown() => _udpClient.Dispose();
 
-    // -------------------------------------------------------------------------
-    // Send path: KnxConnection.SendMessageAsync → KnxIpRoutingBus → IUdpMessageQueue
-    // -------------------------------------------------------------------------
+    // ---- Send path: KnxConnection.SendMessageAsync → KnxIpRoutingBus → IKnxIpRoutingQueue ----
 
     [Test]
-    public async Task SendMessage_FullStack_EncodedBytesReachUdpQueue()
+    public async Task SendMessage_FullStack_EncodedBytesReachSendQueue()
     {
         var msg = GroupMessageRequest.Write(new GroupAddress("5/1/0"), new GroupValue([0x01]));
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => new UdpQueueItem((byte[])ci[0], DateTimeOffset.UtcNow));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _connection.SendMessageAsync(msg, CancellationToken.None);
 
-        Assert.That(enqueuedBytes, Is.Not.Null, "Bytes must reach the UDP queue through the full stack");
+        Assert.That(enqueuedBytes, Is.Not.Null, "Bytes must reach the send queue through the full stack");
         Assert.Multiple(() =>
         {
             Assert.That(enqueuedBytes![0], Is.EqualTo(0x06), "KNX/IP: protocol identifier");
@@ -152,8 +149,8 @@ public class KnxConnectionIntegrationTests
         var dest = new GroupAddress("3/2/1");
         var msg = GroupMessageRequest.Write(dest, new GroupValue([0x01]));
         byte[]? enqueuedBytes = null;
-        _udpQueue.Enqueue(Arg.Do<byte[]>(b => enqueuedBytes = b))
-            .Returns(ci => new UdpQueueItem((byte[])ci[0], DateTimeOffset.UtcNow));
+        _sendQueue.When(q => q.Enqueue(Arg.Any<byte[]>(), Arg.Any<int>()))
+                  .Do(ci => enqueuedBytes = (byte[])ci[0]);
 
         await _connection.SendMessageAsync(msg, CancellationToken.None);
 
@@ -294,6 +291,6 @@ public class KnxConnectionIntegrationTests
 
         await Task.WhenAll(tasks);
 
-        _udpQueue.Received(count).Enqueue(Arg.Any<byte[]>());
+        _sendQueue.Received(count).Enqueue(Arg.Any<byte[]>(), Arg.Any<int>());
     }
 }

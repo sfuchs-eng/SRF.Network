@@ -1,106 +1,114 @@
 namespace SRF.Network.Knx.Connection;
 
 /// <summary>
-/// Token-bucket rate limiter for KNX bus access with sliding-window load awareness
+/// Bits-based token-bucket rate limiter for KNX bus access with sliding-window load awareness
 /// and burst-with-cooldown behavior.
 /// <para>
-/// <b>Normal mode</b> (bus load ≤ <c>MaxContinuousBusLoad</c>): tokens accumulate at one per
-/// <see cref="KnxIpRoutingOptions.MinTelegramInterval"/>, capped at
-/// <see cref="KnxIpRoutingOptions.MaxBurstSize"/>. Outbound sends wait until a token is available.
+/// Each telegram is weighted by its actual KNX TP wire bit count
+/// (cEMI bytes × <see cref="KnxIpRoutingOptions.BitsPerByte"/> + <see cref="KnxIpRoutingOptions.PhysicalOverheadBitsPerTelegram"/>),
+/// giving an accurate representation of physical bus utilization.
 /// </para>
 /// <para>
-/// <b>High-load mode</b> (bus load &gt; <c>MaxContinuousBusLoad</c>): only existing burst tokens may
-/// be spent — the rate limiter does not generate new tokens by waiting. When the burst pool is
-/// exhausted the limiter transitions to cooldown.
+/// <b>Normal mode</b> (bus load ≤ <see cref="KnxIpRoutingOptions.MaxContinuousBusLoad"/>):
+/// bit-credit accumulates at <c>BusBitRate × BusLineCount</c> bits/second, capped at
+/// <see cref="KnxIpRoutingOptions.MaxBurstBits"/>. Outbound sends wait until enough credit is available.
 /// </para>
 /// <para>
-/// <b>Cooldown mode</b>: sends are spaced at <c>MinTelegramInterval / CooldownMaxBusLoad</c> apart
-/// for <see cref="KnxIpRoutingOptions.CooldownDuration"/>, after which normal mode resumes.
+/// <b>High-load mode</b> (bus load &gt; threshold): only existing burst credit may be spent.
+/// When the burst pool is exhausted the limiter transitions to cooldown.
+/// </para>
+/// <para>
+/// <b>Cooldown mode</b>: sends are spaced so that the outbound bit rate does not exceed
+/// <c>BusBitRate × BusLineCount × CooldownMaxBusLoad</c> for <see cref="KnxIpRoutingOptions.CooldownDuration"/>,
+/// after which normal mode resumes.
 /// </para>
 /// <para>
 /// Received telegrams (via <see cref="NotifyReceived"/>) are recorded in the load window only.
-/// They do not consume tokens or block pending sends, but they do increase the measured bus load
+/// They do not consume bit credit or block pending sends, but they increase the measured bus load
 /// and can trigger high-load or cooldown transitions.
 /// </para>
 /// </summary>
 internal sealed class KnxBusRateLimiter
 {
-    private readonly TimeSpan _minInterval;
-    private readonly TimeSpan _loadWindowDuration;
-    private readonly int _maxBurstSize;
+    private readonly double _busBitsPerSecond;  // BusBitRate * BusLineCount
+    private readonly double _maxBurstBits;
     private readonly double _maxContinuousLoad;
     private readonly TimeSpan _cooldownDuration;
     private readonly double _cooldownMaxLoad;
+    private readonly TimeSpan _loadWindowDuration;
 
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
 
-    // Bus event window (sends + receives) — guarded by _lock
-    private readonly Queue<long> _busEventTicks = new();
+    // Bus event window (sends + receives, weighted by bits) — guarded by _lock
+    private readonly Queue<(long ticks, int bits)> _busEvents = new();
     private readonly object _lock = new();
 
-    // Token bucket — only accessed while holding _sendGate (single-writer), so no extra lock needed
-    private double _availableTokens;       // 0 .. _maxBurstSize
-    private long _lastRefillTicks;         // when tokens were last topped up
-    private long _lastSendTicks;           // when the last send event was recorded (0 = never)
-    private long _cooldownStartTicks;      // 0 = not in cooldown
+    // Token bucket — only accessed while holding _sendGate (single-writer), no extra lock needed
+    private double _availableBits;        // 0 .. _maxBurstBits
+    private long _lastRefillTicks;        // when credit was last topped up (0 = never)
+    private long _lastSendTicks;          // when the last send was recorded (0 = never)
+    private long _cooldownStartTicks;     // 0 = not in cooldown
 
     internal KnxBusRateLimiter(KnxIpRoutingOptions options, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        _minInterval         = options.MinTelegramInterval;
-        _loadWindowDuration  = options.LoadWindowDuration;
-        _maxBurstSize        = Math.Max(options.MaxBurstSize, 1);
-        _maxContinuousLoad   = options.MaxContinuousBusLoad;
-        _cooldownDuration    = options.CooldownDuration;
-        _cooldownMaxLoad     = options.CooldownMaxBusLoad;
+        _busBitsPerSecond  = (double)options.BusBitRate * Math.Max(options.BusLineCount, 1);
+        _maxBurstBits      = Math.Max(options.MaxBurstBits, 1);
+        _maxContinuousLoad = options.MaxContinuousBusLoad;
+        _cooldownDuration  = options.CooldownDuration;
+        _cooldownMaxLoad   = options.CooldownMaxBusLoad;
+        _loadWindowDuration = options.LoadWindowDuration;
 
-        _timeProvider    = timeProvider;
-        _availableTokens = _maxBurstSize; // start with a full bucket
+        _timeProvider  = timeProvider;
+        _availableBits = _maxBurstBits; // full bucket at startup
     }
 
     /// <summary>
     /// Records an incoming telegram in the bus load window.
-    /// Non-blocking and thread-safe; does not consume tokens or block pending sends.
+    /// Non-blocking and thread-safe; does not consume bit credit or block pending sends.
     /// </summary>
-    internal void NotifyReceived()
+    /// <param name="bits">KNX TP wire bit count of the received telegram.</param>
+    internal void NotifyReceived(int bits)
     {
-        var now = _timeProvider.GetUtcNow().UtcTicks;
+        var nowTicks = _timeProvider.GetUtcNow().UtcTicks;
         lock (_lock)
-            _busEventTicks.Enqueue(now);
+            _busEvents.Enqueue((nowTicks, bits));
     }
 
     /// <summary>
     /// Waits until the bus rate allows the next outbound send, then claims the send slot.
-    /// Concurrent callers are serialized; each evaluates the current load independently after
-    /// the previous sender has finished.
+    /// Concurrent callers are serialized through the send gate; each evaluates the current
+    /// load independently after the previous sender has finished.
     /// </summary>
-    internal async Task WaitForSendSlotAsync(CancellationToken cancellationToken)
+    /// <param name="bits">KNX TP wire bit count of the telegram about to be sent.</param>
+    /// <param name="cancellationToken">Token to cancel the wait.</param>
+    internal async Task WaitForSendSlotAsync(int bits, CancellationToken cancellationToken)
     {
         await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_minInterval == TimeSpan.Zero)
+            if (_busBitsPerSecond <= 0.0)
             {
                 // Rate limiting disabled — record send and return immediately.
-                RecordSendEvent(_timeProvider.GetUtcNow().UtcTicks);
+                RecordSendEvent(_timeProvider.GetUtcNow().UtcTicks, bits);
                 return;
             }
 
-            var delay = ComputeDelay();
+            var delay = ComputeDelay(bits);
 
             if (delay > TimeSpan.Zero)
             {
                 await Task.Delay(delay, _timeProvider, cancellationToken).ConfigureAwait(false);
-                // Refill tokens for the time we just waited.
-                RefillTokens(_timeProvider.GetUtcNow().UtcTicks);
+                // Refill credit for the time we just waited.
+                RefillCredit(_timeProvider.GetUtcNow().UtcTicks);
             }
 
-            // Consume one token and record the send.
-            _availableTokens = Math.Max(0.0, _availableTokens - 1.0);
-            RecordSendEvent(_timeProvider.GetUtcNow().UtcTicks);
+            // Consume bit credit and record the send.
+            _availableBits = Math.Max(0.0, _availableBits - bits);
+            RecordSendEvent(_timeProvider.GetUtcNow().UtcTicks, bits);
         }
         finally
         {
@@ -111,45 +119,46 @@ internal sealed class KnxBusRateLimiter
     // ---- Private helpers ----
 
     /// <summary>
-    /// Computes the delay the current caller must wait before being allowed to send.
-    /// Also transitions state (entering cooldown) as a side effect when needed.
+    /// Computes the delay the caller must wait before sending <paramref name="bits"/> bits.
+    /// May transition state to cooldown as a side effect.
     /// Must be called while holding the send gate.
     /// </summary>
-    private TimeSpan ComputeDelay()
+    private TimeSpan ComputeDelay(int bits)
     {
         var nowTicks = _timeProvider.GetUtcNow().UtcTicks;
-        RefillTokens(nowTicks);
+        RefillCredit(nowTicks);
 
         var load = ComputeLoad(nowTicks);
 
         // --- Cooldown active ---
         if (IsCooldownActive(nowTicks))
-            return CooldownSendDelay(nowTicks);
+            return CooldownSendDelay(nowTicks, bits);
 
         // --- Normal mode: load at or below threshold ---
         if (load <= _maxContinuousLoad)
         {
-            if (_availableTokens >= 1.0)
+            if (_availableBits >= bits)
                 return TimeSpan.Zero;
 
-            // Wait for one token to become available.
-            return TimeSpan.FromTicks((long)((1.0 - _availableTokens) * _minInterval.Ticks));
+            // Wait until enough credit has accumulated for this telegram.
+            var deficit = bits - _availableBits;
+            return TimeSpan.FromSeconds(deficit / _busBitsPerSecond);
         }
 
         // --- High-load mode: load above threshold ---
-        if (_availableTokens >= 1.0)
-            return TimeSpan.Zero; // spend a burst token; no delay
+        if (_availableBits >= bits)
+            return TimeSpan.Zero; // spend burst credit; no delay
 
         // Burst pool exhausted under high load → enter cooldown.
         _cooldownStartTicks = nowTicks;
-        return CooldownSendDelay(nowTicks);
+        return CooldownSendDelay(nowTicks, bits);
     }
 
     /// <summary>
-    /// Returns the delay required in cooldown mode so that sends do not exceed
+    /// Returns the delay required in cooldown mode so that outbound sends do not exceed
     /// <see cref="_cooldownMaxLoad"/> of bus capacity.
     /// </summary>
-    private TimeSpan CooldownSendDelay(long nowTicks)
+    private TimeSpan CooldownSendDelay(long nowTicks, int bits)
     {
         if (_cooldownMaxLoad <= 0.0)
         {
@@ -158,21 +167,23 @@ internal sealed class KnxBusRateLimiter
             return cooldownRemaining > 0 ? TimeSpan.FromTicks(cooldownRemaining) : TimeSpan.Zero;
         }
 
-        var cooldownInterval = TimeSpan.FromTicks((long)(_minInterval.Ticks / _cooldownMaxLoad));
+        // Effective bit rate during cooldown = _busBitsPerSecond * _cooldownMaxLoad.
+        // Interval for this telegram = bits / effectiveBitRate.
+        var cooldownIntervalSeconds = bits / (_busBitsPerSecond * _cooldownMaxLoad);
 
         if (_lastSendTicks == 0L)
             return TimeSpan.Zero;
 
-        var elapsed = TimeSpan.FromTicks(nowTicks - _lastSendTicks);
-        var remaining = cooldownInterval - elapsed;
-        return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+        var elapsedSeconds = (nowTicks - _lastSendTicks) / (double)TimeSpan.TicksPerSecond;
+        var remaining = cooldownIntervalSeconds - elapsedSeconds;
+        return remaining > 0.0 ? TimeSpan.FromSeconds(remaining) : TimeSpan.Zero;
     }
 
     /// <summary>
-    /// Adds tokens for the elapsed time since the last refill. Capped at <see cref="_maxBurstSize"/>.
+    /// Adds bit credit for the time elapsed since the last refill. Capped at <see cref="_maxBurstBits"/>.
     /// Must be called while holding the send gate (single-writer).
     /// </summary>
-    private void RefillTokens(long nowTicks)
+    private void RefillCredit(long nowTicks)
     {
         if (_lastRefillTicks == 0L)
         {
@@ -180,18 +191,19 @@ internal sealed class KnxBusRateLimiter
             return;
         }
 
-        var elapsedTicks = nowTicks - _lastRefillTicks;
-        if (elapsedTicks <= 0)
+        var elapsedSeconds = (nowTicks - _lastRefillTicks) / (double)TimeSpan.TicksPerSecond;
+        if (elapsedSeconds <= 0.0)
             return;
 
-        var newTokens = elapsedTicks / (double)_minInterval.Ticks;
-        _availableTokens = Math.Min(_availableTokens + newTokens, _maxBurstSize);
+        var newBits = elapsedSeconds * _busBitsPerSecond;
+        _availableBits = Math.Min(_availableBits + newBits, _maxBurstBits);
         _lastRefillTicks = nowTicks;
     }
 
     /// <summary>
     /// Returns the bus load (0–1) measured over the <see cref="_loadWindowDuration"/> sliding window.
     /// Prunes events older than the window as a side effect.
+    /// The load is the ratio of total bits observed in the window to <see cref="_maxBurstBits"/>.
     /// </summary>
     private double ComputeLoad(long nowTicks)
     {
@@ -201,10 +213,14 @@ internal sealed class KnxBusRateLimiter
         var cutoff = nowTicks - _loadWindowDuration.Ticks;
         lock (_lock)
         {
-            while (_busEventTicks.Count > 0 && _busEventTicks.Peek() < cutoff)
-                _busEventTicks.Dequeue();
+            while (_busEvents.Count > 0 && _busEvents.Peek().ticks < cutoff)
+                _busEvents.Dequeue();
 
-            return (double)_busEventTicks.Count / _maxBurstSize;
+            var bitsInWindow = 0L;
+            foreach (var (_, bits) in _busEvents)
+                bitsInWindow += bits;
+
+            return bitsInWindow / _maxBurstBits;
         }
     }
 
@@ -214,13 +230,12 @@ internal sealed class KnxBusRateLimiter
         && (nowTicks - _cooldownStartTicks) < _cooldownDuration.Ticks;
 
     /// <summary>
-    /// Records an outbound send in both the bus event window and the last-send timestamp.
+    /// Records an outbound send in the bus event window and updates the last-send timestamp.
     /// </summary>
-    private void RecordSendEvent(long nowTicks)
+    private void RecordSendEvent(long nowTicks, int bits)
     {
         lock (_lock)
-            _busEventTicks.Enqueue(nowTicks);
+            _busEvents.Enqueue((nowTicks, bits));
         _lastSendTicks = nowTicks;
     }
 }
-
