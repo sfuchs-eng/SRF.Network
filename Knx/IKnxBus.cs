@@ -1,5 +1,4 @@
 using SRF.Network.Knx.Connection;
-using SRF.Network.Knx.Messages;
 
 namespace SRF.Network.Knx;
 
