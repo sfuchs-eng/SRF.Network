@@ -207,4 +207,46 @@ public class KnxDptResolverTests
             Assert.That(result2, Is.SameAs(dpt2));
         });
     }
+
+    // -------------------------------------------------------------------------
+    // GetDpt — main-only DPT (e.g. DPT-9, DPT-5)
+    // -------------------------------------------------------------------------
+
+    [TestCase("DPT-9",  9, 0, Description = "DPT-9  temperature/lux (main-only)")]
+    [TestCase("DPT-5",  5, 0, Description = "DPT-5  unsigned byte (main-only)")]
+    [TestCase("DPT-1",  1, 0, Description = "DPT-1  binary (main-only)")]
+    public void GetDpt_AddressWithMainOnlyDpt_CallsFactoryWithCorrectMainAndSub0(
+        string dptString, int expectedMain, int expectedSub)
+    {
+        var address = new GroupAddress("0/0/10");
+        var etsConfig = new EtsGroupAddressConfig { Label = "Main-only GA" };
+        etsConfig.DPTs = dptString;
+        _domainConfig.GroupAddresses[address.Address] = etsConfig;
+
+        var dpt = new StubDpt(dptString) { Id = new DataPointTypeId(expectedMain, expectedSub) };
+        _dptFactory.Get(expectedMain, expectedSub).Returns(dpt);
+
+        _resolver.GetDpt(address);
+
+        _dptFactory.Received(1).Get(expectedMain, expectedSub);
+    }
+
+    [TestCase("DPT-9",  9, 0, Description = "DPT-9  temperature/lux (main-only)")]
+    [TestCase("DPT-5",  5, 0, Description = "DPT-5  unsigned byte (main-only)")]
+    [TestCase("DPT-1",  1, 0, Description = "DPT-1  binary (main-only)")]
+    public void GetDpt_AddressWithMainOnlyDpt_ReturnsDptFromFactory(
+        string dptString, int main, int sub)
+    {
+        var address = new GroupAddress("0/0/10");
+        var etsConfig = new EtsGroupAddressConfig { Label = "Main-only GA" };
+        etsConfig.DPTs = dptString;
+        _domainConfig.GroupAddresses[address.Address] = etsConfig;
+
+        var expectedDpt = new StubDpt(dptString) { Id = new DataPointTypeId(main, sub) };
+        _dptFactory.Get(main, sub).Returns(expectedDpt);
+
+        var result = _resolver.GetDpt(address);
+
+        Assert.That(result, Is.SameAs(expectedDpt));
+    }
 }

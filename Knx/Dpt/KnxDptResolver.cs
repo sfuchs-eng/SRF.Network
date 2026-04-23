@@ -43,7 +43,7 @@ public class KnxDptResolver : IDptResolver
             if (!_domainConfig.GroupAddresses.TryGetValue(groupAddress.Address, out var etsConfig))
                 throw new KnxException($"Group address {groupAddress} not found in ETS group address export.");
 
-            if (!etsConfig.HasValidDPT)
+            if (!etsConfig.DPT.IsValidMainType)
                 throw new KnxException($"Group address {groupAddress} ({etsConfig.Label}) has no valid DPT configured in the ETS export.");
 
             var dpt = _dptFactory.Get(etsConfig.DPT.Main, etsConfig.DPT.Sub);
