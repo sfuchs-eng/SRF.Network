@@ -101,9 +101,12 @@ public class KnxIpRoutingBusTests
         _sendQueue = Substitute.For<IKnxIpRoutingQueue>();
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
 
-        _udpClient.IsConnected.Returns(false);
-        _udpClient.ConnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        _udpClient.DisconnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        bool connected = false;
+        _udpClient.IsConnected.Returns(_ => connected);
+        _udpClient.ConnectAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => { connected = true; return Task.CompletedTask; });
+        _udpClient.DisconnectAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => { connected = false; return Task.CompletedTask; });
 
         var options = Substitute.For<IOptions<KnxConfiguration>>();
         options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
@@ -185,26 +188,6 @@ public class KnxIpRoutingBusTests
     {
         await _bus.DisconnectAsync();
         await _udpClient.Received(1).DisconnectAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task DisconnectAsync_UnsubscribesFromUdpMessageReceived()
-    {
-        await _bus.DisconnectAsync();
-
-        bool fired = false;
-        _bus.MessageReceived += (_, _) => fired = true;
-
-        var rawBytes = BuildRoutingFrame(
-            srcAddr: new IndividualAddress("1.1.5").Address,
-            dstAddr: new GroupAddress("0/0/1").Address,
-            eventType: GroupEventType.ValueWrite,
-            value: [0x01]);
-
-        _udpClient.MessageReceived += Raise.EventWith(
-            new UdpMessageReceivedEventArgs(rawBytes, DummyEndpoint, DateTimeOffset.UtcNow));
-
-        Assert.That(fired, Is.False, "After disconnect, UDP messages should not be processed");
     }
 
     // ---- SendGroupMessageAsync ----

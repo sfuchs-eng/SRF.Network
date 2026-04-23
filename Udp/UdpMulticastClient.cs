@@ -21,6 +21,7 @@ public class UdpMulticastClient : IUdpMulticastClient
     private Task? _receiveTask;
     private bool _isConnected;
     private readonly object _lock = new object();
+    private readonly SemaphoreSlim _connectLock = new SemaphoreSlim(1, 1);
     private bool _disposed;
 
     public bool IsConnected
@@ -53,9 +54,12 @@ public class UdpMulticastClient : IUdpMulticastClient
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
+        await _connectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
         if (IsConnected)
         {
-            _logger.LogWarning("UDP multicast client is already connected.");
+            _logger.LogDebug("UDP multicast client is already connected (concurrent call, semaphore safety net).");
             return;
         }
 
@@ -119,6 +123,11 @@ public class UdpMulticastClient : IUdpMulticastClient
             await CleanupAsync();
             OnConnectionStatusChanged(new UdpConnectionEventArgs(false, ex.Message));
             throw;
+        }
+        }
+        finally
+        {
+            _connectLock.Release();
         }
     }
 
@@ -296,6 +305,7 @@ public class UdpMulticastClient : IUdpMulticastClient
                 // Fire and forget - we're disposing
                 _ = DisconnectAsync();
             }
+            _connectLock.Dispose();
         }
 
         _disposed = true;

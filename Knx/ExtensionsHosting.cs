@@ -51,6 +51,7 @@ public static class ExtensionsHosting
 
         services.TryAddSingleton<IDptResolver, KnxDptResolver>();
         services.AddSingleton<IKnxConnection, TConnector>();
+        services.TryAddSingleton<IKnxLibraryInitialization, KnxLibraryInitializationStub>();
         return services;
     }
 

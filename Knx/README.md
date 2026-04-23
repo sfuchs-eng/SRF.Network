@@ -45,13 +45,43 @@ public class MyService(IKnxConnection knx)
 
 ## Consumer Must Register
 
-**`IKnxMasterDataProvider`** — required by `IDptFactory` to resolve DPT encoders from the KNX master data XML. `SRF.Knx.Core` ships `KnxMasterDataProvider` which loads the XML from `KnxConfiguration.KnxMasterFolder`:
+### `IKnxMasterDataProvider`
+
+Required by `IDptFactory` to resolve DPT encoders from the KNX master data XML. `SRF.Knx.Core` ships the abstract base class `SRF.Knx.Core.Master.KnxMasterDataProvider` — **the consumer application must provide a concrete implementation** and register it before calling `AddKnxIpRouting`.
+
+Derive from the abstract base class and call the built-in `GetMasterDataFromFile` helper:
+
+```csharp
+using Microsoft.Extensions.Options;
+using SRF.Knx.Config;
+using SRF.Knx.Core.Master;
+
+internal sealed class KnxMasterDataProvider(IOptions<KnxConfiguration> options)
+    : KnxMasterDataProvider
+{
+    private KnxMasterData? _cache;
+
+    public override KnxMasterData GetMasterData()
+    {
+        _cache ??= GetMasterDataFromFile(
+            Path.Combine(options.Value.KnxMasterFolder, "knx_master.xml"));
+        return _cache;
+    }
+}
+```
+
+Then register it before calling `AddKnxIpRouting`:
 
 ```csharp
 services.AddSingleton<IKnxMasterDataProvider, KnxMasterDataProvider>();
+services.AddKnxIpRouting("Knx");
 ```
 
 The KNX master data folder is configurable via `Knx:KnxMasterFolder` (defaults to `%AppData%/knx-master`). Download the KNX master data XML from the KNX Association and place it there.
+
+### `DomainConfiguration`
+
+Required by `IDptResolver` to map group addresses to DPTs. Loaded automatically from `KnxConfiguration.EtsGAExportFile` by `AddKnxIpRouting` — no manual registration needed when using that extension.
 
 ## Configuration
 

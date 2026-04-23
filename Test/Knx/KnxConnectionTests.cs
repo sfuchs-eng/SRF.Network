@@ -134,33 +134,6 @@ public class KnxConnectionTests
         Assert.That(captured, Is.Not.Null);
     }
 
-    [Test]
-    public async Task ConnectAsync_WhenBusFails_DoesNotSubscribeToMessageReceived()
-    {
-        _bus.IsConnected.Returns(false);
-        _bus.ConnectionState.Returns(BusConnectionState.Broken); // connection failed
-        _bus.ConnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-
-        await _connection.ConnectAsync();
-
-        bool messageReceived = false;
-        _connection.MessageReceived += (_, _) => messageReceived = true;
-
-        var eventArgs = new KnxMessageReceivedEventArgs(
-            new GroupEventArgs
-            {
-                DestinationAddress = new GroupAddress("0/0/1"),
-                SourceAddress = new IndividualAddress("1.1.1"),
-                EventType = GroupEventType.ValueRead,
-                Value = new GroupValue([])
-            },
-            DateTimeOffset.UtcNow);
-
-        _bus.MessageReceived += Raise.Event<EventHandler<KnxMessageReceivedEventArgs>>(null, eventArgs);
-
-        Assert.That(messageReceived, Is.False);
-    }
-
     // -------------------------------------------------------------------------
     // DisconnectAsync
     // -------------------------------------------------------------------------
@@ -173,36 +146,6 @@ public class KnxConnectionTests
         await _connection.DisconnectAsync();
 
         await _bus.Received(1).DisconnectAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task DisconnectAsync_UnsubscribesFromMessageReceived()
-    {
-        // First connect to subscribe
-        _bus.IsConnected.Returns(false);
-        _bus.ConnectionState.Returns(BusConnectionState.Connected);
-        _bus.ConnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        _bus.DisconnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        await _connection.ConnectAsync();
-
-        bool messageReceived = false;
-        _connection.MessageReceived += (_, _) => messageReceived = true;
-
-        await _connection.DisconnectAsync();
-
-        var eventArgs = new KnxMessageReceivedEventArgs(
-            new GroupEventArgs
-            {
-                DestinationAddress = new GroupAddress("0/0/1"),
-                SourceAddress = new IndividualAddress("1.1.1"),
-                EventType = GroupEventType.ValueRead,
-                Value = new GroupValue([])
-            },
-            DateTimeOffset.UtcNow);
-
-        _bus.MessageReceived += Raise.Event<EventHandler<KnxMessageReceivedEventArgs>>(null, eventArgs);
-
-        Assert.That(messageReceived, Is.False, "After disconnect, MessageReceived should no longer be forwarded");
     }
 
     // -------------------------------------------------------------------------

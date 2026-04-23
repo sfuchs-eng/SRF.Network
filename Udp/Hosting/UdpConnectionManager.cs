@@ -90,7 +90,11 @@ public class UdpConnectionManager : BackgroundService
             }
             finally
             {
-                await Task.Delay(TimeSpan.FromSeconds(_options.ReconnectInterval), cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(_options.ReconnectInterval), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { }
             }
         }
 

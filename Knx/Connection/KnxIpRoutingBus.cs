@@ -48,6 +48,7 @@ public class KnxIpRoutingBus : IKnxBus
         _localAddress = ParseKnxAddress(options?.Value?.ConnectionString);
 
         _udpClient.ConnectionStatusChanged += OnUdpConnectionStatusChanged;
+        _udpClient.MessageReceived += OnUdpMessageReceived;
     }
 
     /// <inheritdoc/>
@@ -65,15 +66,15 @@ public class KnxIpRoutingBus : IKnxBus
     /// <inheritdoc/>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        _udpClient.MessageReceived += OnUdpMessageReceived;
-        await _udpClient.ConnectAsync(cancellationToken);
+        if (!_udpClient.IsConnected)
+            await _udpClient.ConnectAsync(cancellationToken);
+
         _logger.LogInformation("KNX/IP routing bus connected (local address {LocalAddress}).", _localAddress);
     }
 
     /// <inheritdoc/>
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        _udpClient.MessageReceived -= OnUdpMessageReceived;
         await _udpClient.DisconnectAsync(cancellationToken);
         _logger.LogInformation("KNX/IP routing bus disconnected.");
     }
@@ -117,6 +118,9 @@ public class KnxIpRoutingBus : IKnxBus
 
     private void OnUdpMessageReceived(object? sender, UdpMessageReceivedEventArgs e)
     {
+        if (!IsConnected)
+            return;
+
         try
         {
             var header = new KnxIpHeader();

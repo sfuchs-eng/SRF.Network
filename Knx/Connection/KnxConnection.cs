@@ -61,6 +61,7 @@ public class KnxConnection : IKnxConnection
         */
 
         knxBus.ConnectionStateChanged += (s, e) => { OnConnectionStatusChanged(e); };
+        knxBus.MessageReceived += OnBusMessageReceived;
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -69,11 +70,7 @@ public class KnxConnection : IKnxConnection
         {
             await knxBus.ConnectAsync(cancellationToken);
             if (knxBus.ConnectionState == BusConnectionState.Connected)
-            {
                 logger.LogInformation("KNX bus connected.");
-                knxBus.MessageReceived += OnBusMessageReceived;
-                //knxBus.IoTGroupMessageReceived += OnIoTGroupMessageReceived;
-            }
             else
                 logger.LogError("KNX bus connection failed, left in status {connectionStatus}", knxBus.ConnectionState);
         }
@@ -81,9 +78,7 @@ public class KnxConnection : IKnxConnection
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        knxBus.MessageReceived -= OnBusMessageReceived;
         await knxBus.DisconnectAsync(cancellationToken);
-        //knxBus.IoTGroupMessageReceived -= OnIoTGroupMessageReceived;
     }
 
     public async Task SendMessageAsync(IKnxMessage message, CancellationToken token)

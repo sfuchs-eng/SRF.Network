@@ -579,4 +579,30 @@ public class CemiLDataFrameTests
 
         Assert.That(decoded.Value.Value, Is.EqualTo(data));
     }
+
+    /// <summary>
+    /// Replays a real Wireshark-captured KNX/IP cEMI frame for group address 8/6/1 (DPT 9.001).
+    /// cEMI hex: 29 00 9C F0 01 09 46 01 03 00 80 84 12
+    /// Verifies the frame is parsed correctly and the raw GroupValue bytes are preserved
+    /// exactly as sent on the wire (byte-order agnostic at this layer).
+    /// </summary>
+    [Test]
+    public void Decode_WiresharkCapture_8_6_1_Dpt9()
+    {
+        // Wireshark: cEMI L_Data.ind, Src=0.1.9, Dst=8/6/1, GroupValueWrite, Data=$8412
+        var cemiBytes = new byte[] { 0x29, 0x00, 0x9C, 0xF0, 0x01, 0x09, 0x46, 0x01, 0x03, 0x00, 0x80, 0x84, 0x12 };
+
+        var frame = Decode(cemiBytes);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(frame.MessageCode, Is.EqualTo(CemiLDataFrame.MessageCodeInd));
+            Assert.That(frame.EventType, Is.EqualTo(GroupEventType.ValueWrite));
+            Assert.That(frame.SourceAddress.ToString(), Is.EqualTo("0.1.9"));
+            Assert.That(frame.DestinationAddress.Address, Is.EqualTo((ushort)0x4601),
+                "Destination must be 8/6/1 = 0x4601");
+            Assert.That(frame.Value.Value, Is.EqualTo(new byte[] { 0x84, 0x12 }),
+                "GroupValue bytes must be preserved exactly as on the wire");
+        });
+    }
 }

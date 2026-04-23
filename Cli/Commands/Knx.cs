@@ -32,7 +32,8 @@ public class Knx : HostLauncher<Knx.Worker>
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
         base.AddServices(services, cliContext);
-        services.AddKnx<KnxConnection>();
+        services.AddSingleton<IKnxMasterDataProvider, KnxMasterDataProvider>();
+        services.AddKnxIpRouting("default");
     }
 
     public class Worker(
@@ -95,7 +96,6 @@ public class Knx : HostLauncher<Knx.Worker>
                     Console.WriteLine("Listening to all group addresses...");
                 }
 
-                await knxConnection.ConnectAsync(stoppingToken);
                 knxConnection.MessageReceived += KnxMessageReceivedHandler;
                 while (!stoppingToken.IsCancellationRequested)
                 {
