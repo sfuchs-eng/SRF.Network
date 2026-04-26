@@ -1,6 +1,6 @@
 [submodule "Subs/SRF.Industrial"]
 	path = Subs/SRF.Industrial
-	url = https://github.com/sfuchs-eng/SRF.Industrial
+	url = git@github.com:sfuchs-eng/SRF.Industrial
 [submodule "Subs/SRF.Knx"]
 	path = Subs/SRF.Knx
 	url = git@github.com:sfuchs-eng/SRF.Knx.git
