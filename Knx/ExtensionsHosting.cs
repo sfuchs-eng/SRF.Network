@@ -97,12 +97,18 @@ public static class ExtensionsHosting
         ArgumentNullException.ThrowIfNull(name);
 
         services.AddUdpMulticastWithConnectionManager(name, configSection);
-        services.AddKnx<KnxConnection>();
+
+        // Infrastructure — all TryAdd, safe to call multiple times for multiple connections.
+        services.AddKnxConfig();
+        services.AddKnxCore();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IDptResolver, KnxDptResolver>();
+        services.TryAddSingleton<IKnxLibraryInitialization, KnxLibraryInitializationStub>();
 
         services.AddOptions<KnxIpRoutingOptions>()
             .BindConfiguration(KnxIpRoutingOptions.DefaultConfigSectionName);
 
-        // KnxIpRoutingQueue: concrete singleton (for KnxIpRoutingSender) + interface (for consumers)
+        // KnxIpRoutingQueue: keyed by connection name
         services.AddKeyedSingleton<KnxIpRoutingQueue>(name, (sp, _) =>
         {
             var routingOpts  = sp.GetRequiredService<IOptions<KnxIpRoutingOptions>>();
@@ -121,7 +127,8 @@ public static class ExtensionsHosting
             return new KnxIpRoutingSender(name, queue, udpClient, logger);
         });
 
-        services.AddSingleton<IKnxBus>(sp =>
+        // IKnxBus: keyed by connection name so each connection gets its own bus instance.
+        services.AddKeyedSingleton<IKnxBus>(name, (sp, _) =>
         {
             var udpClient    = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
             var sendQueue    = sp.GetRequiredKeyedService<IKnxIpRoutingQueue>(name);
@@ -131,6 +138,21 @@ public static class ExtensionsHosting
             var timeProvider = sp.GetRequiredService<TimeProvider>();
             return new KnxIpRoutingBus(udpClient, sendQueue, options, routingOpts, logger, timeProvider);
         });
+
+        // IKnxConnection: keyed by connection name, explicitly wired to the keyed IKnxBus.
+        services.AddKeyedSingleton<IKnxConnection>(name, (sp, _) =>
+            new KnxConnection(
+                sp.GetRequiredService<IKnxLibraryInitialization>(),
+                sp.GetRequiredKeyedService<IKnxBus>(name),
+                sp.GetRequiredService<IOptions<KnxConfiguration>>(),
+                sp.GetRequiredService<ILogger<KnxConnection>>(),
+                sp.GetRequiredService<IDptResolver>()));
+
+        // Non-keyed IKnxConnection forwarding: allows IEnumerable<IKnxConnection> to aggregate
+        // all named connections and keeps single-connection consumers (using IKnxConnection directly)
+        // working without changes.
+        services.AddSingleton<IKnxConnection>(
+            sp => sp.GetRequiredKeyedService<IKnxConnection>(name));
 
         return services;
     }
