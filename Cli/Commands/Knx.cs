@@ -32,7 +32,6 @@ public class Knx : HostLauncher<Knx.Worker>
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
         base.AddServices(services, cliContext);
-        services.AddSingleton<IKnxMasterDataProvider, KnxMasterDataProvider>();
         services.AddKnxIpRouting("default");
     }
 

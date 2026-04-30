@@ -23,22 +23,16 @@ public static class ExtensionsHosting
     /// <remarks>
     /// Registers:
     /// <list type="bullet">
-    ///   <item><see cref="SRF.Knx.Config.IKnxConfigFactory"/> and related config services (<c>AddKnxConfig</c>)</item>
-    ///   <item>DPT factory chain: <see cref="SRF.Knx.Core.IDptFactory"/>, <c>IPdtEncoderFactory</c>, <c>IDptNumericInfoFactory</c> (<c>AddKnxCore</c>)</item>
+    ///   <item><see cref="SRF.Knx.Config.IKnxConfigFactory"/> and related config services via <c>AddKnxConfig</c>,
+    ///   including <see cref="SRF.Knx.Config.Domain.DomainConfiguration"/> (loaded from the ETS GA export file)
+    ///   and <see cref="SRF.Knx.Core.IKnxMasterDataProvider"/> → <see cref="SRF.Knx.Config.KnxMasterDataProvider"/>.</item>
+    ///   <item>DPT factory chain: <see cref="SRF.Knx.Core.IDptFactory"/>, <c>IPdtEncoderFactory</c>, <c>IDptNumericInfoFactory</c> via <c>AddKnxCore</c>.</item>
     ///   <item><see cref="IDptResolver"/> → <see cref="KnxDptResolver"/></item>
     ///   <item><see cref="IKnxConnection"/> → <typeparamref name="TConnector"/></item>
     /// </list>
     /// <para>
-    /// <b>Consumer must register separately:</b>
-    /// <list type="bullet">
-    ///   <item><c>IKnxMasterDataProvider</c>, which is required by
-    ///   <see cref="SRF.Knx.Core.IDptFactory"/>. The <c>SRF.Knx.Core</c> library ships
-    ///   <c>KnxMasterDataProvider</c> (loads from <c>KnxConfiguration.KnxMasterFolder</c>):
-    ///   <code>services.AddSingleton&lt;IKnxMasterDataProvider, KnxMasterDataProvider&gt;();</code></item>
-    ///   <item><see cref="SRF.Knx.Config.Domain.DomainConfiguration"/>, which is required by
-    ///   <see cref="KnxDptResolver"/> and holds the ETS group address export:
-    ///   <code>services.AddSingleton(sp => sp.GetRequiredService&lt;IKnxConfigFactory&gt;().GetDomainConfig());</code></item>
-    /// </list>
+    /// All registrations use <c>TryAdd</c> and are safe to call multiple times (e.g. for multiple connections).
+    /// A consumer can override any registration before calling this method.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddKnx<TConnector>(this IServiceCollection services)
@@ -77,9 +71,8 @@ public static class ExtensionsHosting
     /// </list>
     /// </para>
     /// <para>
-    /// <b>Consumer prerequisites:</b> same as for <see cref="AddKnx{TConnector}"/> —
-    /// <c>IKnxMasterDataProvider</c> and <see cref="SRF.Knx.Config.Domain.DomainConfiguration"/>
-    /// must be registered separately before building the host.
+    /// All infrastructure registrations use <c>TryAdd</c> and are safe to call multiple times.
+    /// A consumer can override any registration (e.g. <c>IKnxMasterDataProvider</c>) before calling this method.
     /// </para>
     /// </remarks>
     /// <param name="services">The service collection.</param>
@@ -98,7 +91,7 @@ public static class ExtensionsHosting
 
         services.AddUdpMulticastWithConnectionManager(name, configSection);
 
-        // Infrastructure — all TryAdd, safe to call multiple times for multiple connections.
+        // Infrastructure — all TryAdd (via AddKnxConfig / AddKnxCore), safe to call multiple times.
         services.AddKnxConfig();
         services.AddKnxCore();
         services.TryAddSingleton(TimeProvider.System);
