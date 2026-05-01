@@ -38,8 +38,8 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "fc", Name = "fix-channels", Description = "Batch fix Channel entries for all Group Addresses with ChannelType 'Default' or no DPT set.")]
     public bool BatchCreateChannels { get; set; } = false;
 
-    [CliOption(Alias = "hca", Name = "generate-homecompanion-autogen", Description = "Generate HomeCompanionKnxAutoGen.json for the HomeCompanion.Knx.CodeGen source generator.")]
-    public bool GenerateHomeCompanionAutoGen { get; set; } = false;
+    [CliOption(Alias = "hc", Name = "home-companion-code-gen", Description = "Generate KnxValues.generated.cs source file at the path configured in HomeCompanionCodeGenFile.")]
+    public bool HomeCompanionCodeGen { get; set; } = false;
 
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
@@ -97,15 +97,25 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogInformation("Created new domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
-                SaveAutoGen(domainConfig);
                 applicationLifetime.StopApplication();
                 return Task.CompletedTask;
             }
 
-            if (cmd.GenerateHomeCompanionAutoGen)
+            if (cmd.HomeCompanionCodeGen)
             {
+                if (string.IsNullOrEmpty(config.HomeCompanionCodeGenFile))
+                {
+                    logger.LogError("HomeCompanionCodeGenFile is not configured. Set it in your local SRF.Network.json to the path of HomeCompanion.Knx/KnxValues.generated.cs.");
+                    applicationLifetime.StopApplication();
+                    return Task.CompletedTask;
+                }
                 var dc = knxConfigFactory.GetDomainConfig();
-                SaveAutoGen(dc);
+                var code = knxConfigFactory.GenerateHomeCompanionCode(dc);
+                //TODO: configure a folder and determine the file name from the attributed partial class instead of hardcoding the file name in config and code.
+                File.WriteAllText(config.HomeCompanionCodeGenFile, code, System.Text.Encoding.UTF8);
+                logger.LogInformation("Generated KnxValues source with {count} properties and wrote to '{file}'",
+                    dc.GroupAddresses.Count,
+                    config.HomeCompanionCodeGenFile);
                 applicationLifetime.StopApplication();
                 return Task.CompletedTask;
             }
@@ -117,7 +127,6 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogInformation("Updated domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
-                SaveAutoGen(dc);
             }
 
             if (cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
@@ -217,15 +226,6 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             {
                 logger.LogError(ex, "Error while removing Fresh flag from configurations.");
             }
-        }
-
-        private void SaveAutoGen(SRF.Knx.Config.Domain.DomainConfiguration dc)
-        {
-            var entries = knxConfigFactory.GenerateHomeCompanionAutoGen(dc);
-            knxConfigFactory.SaveHomeCompanionAutoGen(entries);
-            logger.LogInformation("Generated HomeCompanion auto-gen mapping with {count} entries and saved to '{file}'",
-                entries.Count,
-                config.HomeCompanionAutoGenFile);
         }
 
         /// <summary>
