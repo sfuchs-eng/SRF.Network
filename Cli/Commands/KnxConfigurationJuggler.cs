@@ -37,6 +37,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     [CliOption(Alias = "fc", Name = "fix-channels", Description = "Batch fix Channel entries for all Group Addresses with ChannelType 'Default' or no DPT set.")]
     public bool BatchCreateChannels { get; set; } = false;
 
+    [CliOption(Alias = "hca", Name = "generate-homecompanion-autogen", Description = "Generate HomeCompanionKnxAutoGen.json for the HomeCompanion.Knx.CodeGen source generator.")]
+    public bool GenerateHomeCompanionAutoGen { get; set; } = false;
+
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
         base.AddServices(services, cliContext);
@@ -91,6 +94,15 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogInformation("Created new domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
+                SaveAutoGen(domainConfig);
+                applicationLifetime.StopApplication();
+                return Task.CompletedTask;
+            }
+
+            if (cmd.GenerateHomeCompanionAutoGen)
+            {
+                var dc = knxConfigFactory.GetDomainConfig();
+                SaveAutoGen(dc);
                 applicationLifetime.StopApplication();
                 return Task.CompletedTask;
             }
@@ -102,6 +114,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 logger.LogInformation("Updated domain configuration from ETS group address export file '{etsFile}' and saved to '{domainFile}'",
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
+                SaveAutoGen(dc);
             }
 
             if (cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
@@ -201,6 +214,15 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
             {
                 logger.LogError(ex, "Error while removing Fresh flag from configurations.");
             }
+        }
+
+        private void SaveAutoGen(SRF.Knx.Config.Domain.DomainConfiguration dc)
+        {
+            var entries = knxConfigFactory.GenerateHomeCompanionAutoGen(dc);
+            knxConfigFactory.SaveHomeCompanionAutoGen(entries);
+            logger.LogInformation("Generated HomeCompanion auto-gen mapping with {count} entries and saved to '{file}'",
+                entries.Count,
+                config.HomeCompanionAutoGenFile);
         }
 
         /// <summary>
