@@ -7,6 +7,7 @@ using SRF.Knx.Config;
 using SRF.Knx.Config.Domain;
 using SRF.Knx.Config.OpenHab.BaseConfig;
 using SRF.Knx.Config.OpenHab;
+using SRF.Knx.Core;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -43,7 +44,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
     {
         base.AddServices(services, cliContext);
+        services.AddKnxCore();
         services.AddKnxConfig();
+        services.AddKnxOpenHabConfig();
     }
 
     public class Worker(
