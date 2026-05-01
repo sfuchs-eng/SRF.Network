@@ -110,7 +110,10 @@ public class KnxConnection : IKnxConnection
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to decode DPT value for group address {GroupAddress}.", ctx.GroupEventArgs?.DestinationAddress);
+                logger.LogWarning(ex, "Failed to decode DPT {dptId} value ({valueLength}) for group address {GroupAddress}.",
+                    ctx.Dpt?.Id,
+                    ctx.GroupEventArgs?.Value?.Value?.Length,
+                    ctx.GroupEventArgs?.DestinationAddress);
             }
 
             MessageReceived?.Invoke(this, e);
