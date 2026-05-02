@@ -13,9 +13,9 @@ namespace SRF.Network.Knx.Connection;
 /// standard cEMI L_DATA framing.
 /// <para>
 /// The local KNX individual address used as the source address in outbound frames is read
-/// from <see cref="KnxConfiguration.ConnectionString"/> using the Falcon SDK connection-string
-/// syntax (semicolon-separated key=value pairs). Example:
-/// <c>"Type=IpRouting;KnxAddress=1.1.5"</c>. Defaults to <c>0.0.1</c> if the key is absent.
+/// from <see cref="KnxConfiguration.ConnectionString"/> via the <c>KnxAddress</c> key
+/// (both <c>;</c> and <c>,</c> are accepted as token separators). Example:
+/// <c>"Type=IpRouting;KnxAddress=1.0.255"</c>. Defaults to <c>0.0.1</c> if the key is absent.
 /// </para>
 /// </summary>
 public class KnxIpRoutingBus : IKnxBus
@@ -89,7 +89,7 @@ public class KnxIpRoutingBus : IKnxBus
 
         var frame = new CemiLDataFrame
         {
-            MessageCode        = CemiLDataFrame.MessageCodeReq,
+            MessageCode        = CemiLDataFrame.MessageCodeInd, // KNX/IP Routing Indication requires L_DATA.ind (0x29), not L_DATA.req (0x11)
             Ctrl1              = ctrl1,
             SourceAddress      = _localAddress,
             DestinationAddress = message.DestinationAddress,
@@ -165,9 +165,9 @@ public class KnxIpRoutingBus : IKnxBus
     }
 
     /// <summary>
-    /// Parses the <c>KnxAddress</c> token from a Falcon SDK connection string
-    /// (<c>"Type=IpRouting;KnxAddress=1.1.5"</c>).
-    /// Returns <c>0.0.1</c> if the token is absent or cannot be parsed.
+    /// Parses the <c>KnxAddress</c> token from a connection string
+    /// (<c>"Type=IpRouting;KnxAddress=1.0.255"</c>). Both <c>;</c> and <c>,</c> are accepted as
+    /// token separators. Returns <c>0.0.1</c> if the token is absent or cannot be parsed.
     /// </summary>
     private static IndividualAddress ParseKnxAddress(string? connectionString)
     {
@@ -176,7 +176,7 @@ public class KnxIpRoutingBus : IKnxBus
         if (string.IsNullOrWhiteSpace(connectionString))
             return new IndividualAddress(fallback);
 
-        foreach (var token in connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var token in connectionString.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var idx = token.IndexOf('=');
             if (idx < 0) continue;
