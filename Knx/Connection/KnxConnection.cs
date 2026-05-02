@@ -105,8 +105,16 @@ public class KnxConnection : IKnxConnection
             try
             {
                 var dpt = _dptResolver.GetDpt(ctx.GroupEventArgs!.DestinationAddress);
-                ctx.Dpt          = dpt;
-                ctx.DecodedValue = dpt.ToValue(ctx.GroupEventArgs.Value);
+                ctx.Dpt = dpt;
+                // if it's a telegram that should have a decodable payload and we know the DPT, try to decode it and include the decoded value in the event args for easier consumption by subscribers
+                switch (ctx.GroupEventArgs!.EventType)
+                {
+                    case GroupEventType.ValueResponse:
+                    case GroupEventType.ValueWrite:
+                        if (dpt != null)
+                            ctx.DecodedValue = dpt.ToValue(ctx.GroupEventArgs.Value);
+                        break;
+                }
             }
             catch (Exception ex)
             {
