@@ -91,6 +91,19 @@ public static class ExtensionsHosting
 
         services.AddUdpMulticastWithConnectionManager(name, configSection);
 
+        // Forward LocalIpAddress from Knx:ConnectionString into the named UdpMulticastOptions
+        // so that "LocalIpAddress=..." in the connection string drives interface selection.
+        // Config-section values always win: PostConfigure only fills in what is not already set.
+        services.AddOptions<UdpMulticastOptions>(name)
+            .PostConfigure<IOptions<KnxConfiguration>>((opts, knxConfig) =>
+            {
+                if (!string.IsNullOrWhiteSpace(opts.LocalIpAddress))
+                    return; // already set via config section — don't override
+
+                if (TryParseConnectionStringToken(knxConfig.Value.ConnectionString, "LocalIpAddress", out var localIp))
+                    opts.LocalIpAddress = localIp;
+            });
+
         // Infrastructure — all TryAdd (via AddKnxConfig / AddKnxCore), safe to call multiple times.
         services.AddKnxConfig();
         services.AddKnxCore();
@@ -176,5 +189,43 @@ public static class ExtensionsHosting
     {
         builder.Services.AddKnxIpRouting(name, configSection);
         return builder;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Parses a single <c>key=value</c> token from a KNX connection string
+    /// (<c>;</c> and <c>,</c> are accepted as separators). Comparison is case-insensitive.
+    /// </summary>
+    private static bool TryParseConnectionStringToken(
+        string? connectionString,
+        string key,
+        out string value)
+    {
+        value = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return false;
+
+        foreach (var token in connectionString.Split([';', ','],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var idx = token.IndexOf('=');
+            if (idx < 0)
+                continue;
+
+            var k = token[..idx].Trim();
+            var v = token[(idx + 1)..].Trim();
+
+            if (k.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                value = v;
+                return true;
+            }
+        }
+
+        return false;
     }
 }

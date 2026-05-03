@@ -98,6 +98,7 @@ Required by `IDptResolver` to map group addresses to DPTs. Loaded automatically 
       "Knx": {
         "MulticastAddress": "224.0.23.12",
         "Port": 3671,
+        "MulticastLoopback": false,
         "ConnectionManager": {
           "ReconnectInterval": "00:00:10",
           "AutoConnect": true

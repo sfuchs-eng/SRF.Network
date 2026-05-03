@@ -22,9 +22,19 @@ public class UdpMulticastOptions
     public int Port { get; set; } = 5000;
 
     /// <summary>
-    /// Optional local interface IP address to bind to. If null, binds to all interfaces.
+    /// Optional local interface IP address to use for multicast group membership.
+    /// If null, the OS default multicast interface is used.
     /// </summary>
     public string? LocalInterface { get; set; }
+
+    /// <summary>
+    /// Optional IP address hint used to dynamically select the outbound local interface.
+    /// When set, the client derives a suitable local interface address from this hint.
+    /// The value may be an interface host IP, a subnet base address, or CIDR notation
+    /// for both IPv4 and IPv6 families (matching the configured multicast address family).
+    /// Ignored when <see cref="LocalInterface"/> is set.
+    /// </summary>
+    public string? LocalIpAddress { get; set; }
 
     /// <summary>
     /// The Time-To-Live value for multicast packets (1-255). Default is 16.
@@ -45,6 +55,12 @@ public class UdpMulticastOptions
     /// Whether to allow multiple sockets to bind to the same address/port. Default is true.
     /// </summary>
     public bool ReuseAddress { get; set; } = true;
+
+    /// <summary>
+    /// Whether sent multicast datagrams are looped back to this host. Default is false.
+    /// Set to true only when local echo is explicitly desired.
+    /// </summary>
+    public bool MulticastLoopback { get; set; } = false;
 
     /// <summary>
     /// Timeout for receive operations. Default is 5 seconds.

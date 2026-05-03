@@ -46,6 +46,7 @@ each connection's block under `ConnectionManager`.
       "Knx": {
         "MulticastAddress": "224.0.23.12",
         "Port": 3671,
+        "MulticastLoopback": false,
         "TimeToLive": 16,
         "ConnectionManager": {
           "AutoConnect": true,
@@ -229,11 +230,13 @@ Configuration section per connection: `Udp:Connections:{name}`
 |----------|------|---------|-------------|
 | `MulticastAddress` | string | "224.0.0.1" | The multicast group IP address to join |
 | `Port` | int | 5000 | The UDP port for multicast communication |
-| `LocalInterface` | string? | null | Optional local interface IP to bind to. If null, binds to all interfaces |
+| `LocalInterface` | string? | null | Optional explicit local interface IP address for multicast membership (IPv4 or IPv6) |
+| `LocalIpAddress` | string? | null | Optional host/subnet hint (IP or CIDR; IPv4 or IPv6) used to derive the local egress interface dynamically (ignored when `LocalInterface` is set) |
 | `TimeToLive` | int | 16 | TTL for multicast packets (1-255) |
 | `ReceiveBufferSize` | int | 8192 | Size of the receive buffer in bytes |
 | `SendBufferSize` | int | 8192 | Size of the send buffer in bytes |
 | `ReuseAddress` | bool | true | Allow multiple sockets to bind to the same address/port |
+| `MulticastLoopback` | bool | false | Whether sent multicast datagrams are received again by this host |
 | `ReceiveTimeout` | TimeSpan | 5 seconds | Timeout for receive operations |
 
 ### UdpConnectionManagerOptions
@@ -259,7 +262,8 @@ The library is ideal for KNX IP Routing which uses UDP multicast on 224.0.23.12:
     "Connections": {
       "Knx": {
         "MulticastAddress": "224.0.23.12",
-        "Port": 3671
+        "Port": 3671,
+        "MulticastLoopback": false
       }
     }
   }
