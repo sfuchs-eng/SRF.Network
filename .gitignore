@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Generated source files
+**/*.generated.cs
+
 # User-specific files
 *.rsuser
 *.suo

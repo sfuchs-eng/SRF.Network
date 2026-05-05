@@ -122,7 +122,11 @@ public class MqttBrokerConnection : IHostedService, IMqttBrokerConnection, IDisp
         catch (MQTTnet.Adapter.MqttConnectingFailedException conFailEx)
         {
             Logger.LogCritical(conFailEx, "Failed to connect to broker. MQTT services not started.");
-            Logger.LogTrace("MQTT Host: {mqttHost}, User: {mqttUser}, Pass: {mqttPass}", Config.Host, Config.User, Config.Pass);
+            Logger.LogTrace(
+                "MQTT Host: {mqttHost}, User configured: {mqttUserConfigured}, Password configured: {mqttPassConfigured}",
+                Config.Host,
+                !string.IsNullOrWhiteSpace(Config.User),
+                !string.IsNullOrWhiteSpace(Config.Pass));
             //if ( conFailEx.ResultCode == MqttClientConnectResultCode.)
             return;
         }
