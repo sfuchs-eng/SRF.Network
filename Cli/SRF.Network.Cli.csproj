@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Subs\SRF.Knx\SRF.Knx.Config.OpenHab\SRF.Knx.Config.OpenHab.csproj" />
+    <ProjectReference Include="..\OpenHab\SRF.Network.OpenHab.csproj" />
   </ItemGroup>
 
 </Project>
