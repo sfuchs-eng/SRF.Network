@@ -31,6 +31,7 @@ namespace SRF.Network.OpenHab.EventBus
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             PropertyNameCaseInsensitive = true,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, /* we need the \" style encoding */
+            Converters = { new JsonStringEnumConverter() },
         };
 
         public JsonSerializerOptions JsonOptions { get; set; }
@@ -95,16 +96,34 @@ namespace SRF.Network.OpenHab.EventBus
             return eventType ?? throw new ProtocolException($"Failed to determine matching Type for type ID {typeID}");
         }
 
+        private EventType GetEventTypeId(JsonDocument message)
+        {
+            var typeElement = message.RootElement.GetProperty(EventField.type.GetJsonPropertyName());
+            if (typeElement.ValueKind == JsonValueKind.String)
+            {
+                var eventTypeJsonName = typeElement.GetString()
+                    ?? throw new EventParsingException("Cannot get 'type' property from json data. Unable to identify event type.");
+                if (Enum.TryParse(eventTypeJsonName, out EventType eventTypeID))
+                    return eventTypeID;
+
+                Logger.LogDebug("Failed to parse json event type {eventTypeJsonName} to enum EventType value.", eventTypeJsonName);
+                throw new EventParsingException($"Unknown OpenHAB event type '{eventTypeJsonName}'.");
+            }
+
+            if (typeElement.ValueKind == JsonValueKind.Number && typeElement.TryGetInt32(out var numericEventType))
+            {
+                if (Enum.IsDefined(typeof(EventType), numericEventType))
+                    return (EventType)numericEventType;
+
+                throw new EventParsingException($"Unknown OpenHAB event type ID '{numericEventType}'.");
+            }
+
+            throw new EventParsingException("Cannot get 'type' property from json data. Unable to identify event type.");
+        }
+
         private Type GetEventType(JsonDocument message)
         {
-            var eventTypeJsonName = message?.RootElement.GetProperty(EventField.type.GetJsonPropertyName()).GetString()
-                ?? throw new EventParsingException("Cannot get 'type' property from json data. Unable to identify event type.");
-            if ( !Enum.TryParse(eventTypeJsonName, out EventType eventTypeID) )
-            {
-                Logger.LogDebug("Failed to parse json event type {eventTypeJsonName} to enum EventType value.", eventTypeJsonName);
-                eventTypeID = EventType.Unrecognized;
-            }
-            return GetEventType(eventTypeID);
+            return GetEventType(GetEventTypeId(message));
         }
 
         public IEvent Create(EventType eventTypeID)
@@ -123,7 +142,8 @@ namespace SRF.Network.OpenHab.EventBus
             IEvent evt;
             try
             {
-                var eventType = GetEventType(message);
+                var eventTypeId = GetEventTypeId(message);
+                var eventType = GetEventType(eventTypeId);
                 evt = (IEvent)(message.Deserialize(eventType, JsonOptions)
                     ?? throw new ProtocolException("Deserialize returned null without exception."));
             }
@@ -145,7 +165,7 @@ namespace SRF.Network.OpenHab.EventBus
                 jsonPayload.Position = 0;
                 JsonDocument jd = JsonDocument.Parse(jsonPayload, JsonDocOptions);
                 Logger.LogTrace("Rx event, raw payload: {packetPayload}", System.Text.Encoding.UTF8.GetString(jsonPayload.ToArray()));
-                return Create(jd) ?? throw new NullReferenceException("Missing an EventFactory or Create returned null.");
+                return Create(jd);
             }
             catch (Exception ex)
             {
@@ -159,13 +179,12 @@ namespace SRF.Network.OpenHab.EventBus
         public T Create<T>(EventType eventTypeID) where T : class, IEvent
         {
             var reqType = GetEventType(eventTypeID);
-            if (!reqType.IsAssignableFrom(typeof(T)))
-                throw new EventException($"Event type incompatibility: cannot assign {nameof(T)} (requested by clr type) from {reqType.Name} (required by EventType ID)");
-            var evt = Activator.CreateInstance<T>();
-            if (evt is T evtt && evtt != null)
+            if (!typeof(T).IsAssignableFrom(reqType))
+                throw new EventException($"Event type incompatibility: cannot assign {reqType.Name} (required by EventType ID) to {typeof(T).Name} (requested CLR type)");
+            if (Activator.CreateInstance(reqType) is T evt)
             {
-                evtt.Configure(eventTypeID);
-                return evtt;
+                evt.Configure(eventTypeID);
+                return evt;
             }
             throw new EventException($"Failed to create {typeof(T).FullName} object for EventType.{eventTypeID}. Likely the ID and type don't match.");
         }

@@ -82,7 +82,7 @@ namespace SRF.Network.OpenHab.Client
             InternalTokenSource?.Cancel();
         }
 
-        private void PongEventHandler(object sender, EventReceivedEventArgs args)
+        private void PongEventHandler(object? sender, EventReceivedEventArgs args)
         {
             if (sender != this || args.Received.Type != EventType.WebSocketEvent || !((args.Received as WebSocketEvent)?.IsPong ?? false))
                 return;

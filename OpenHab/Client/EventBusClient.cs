@@ -20,6 +20,8 @@ namespace SRF.Network.OpenHab.Client;
 /// </summary>
 public class EventBusClient : IEventBusClient
 {
+    private readonly TimeProvider _timeProvider;
+
     protected EventBusClientOptions Options { get; set; }
     protected ILogger Logger { get; set; }
     public IEventFactory EventFactory { get; set; }
@@ -39,12 +41,13 @@ public class EventBusClient : IEventBusClient
     private ManualResetEventSlim WebSocketReady { get; } = new ManualResetEventSlim(false);
     private ManualResetEventSlim WebSocketReconnectRequired { get; set; } = new ManualResetEventSlim(false);
 
-    public EventBusClient(IOptions<EventBusClientOptions> options, IEventFactory eventFactory, ILogger<EventBusClient> logger)
+    public EventBusClient(IOptions<EventBusClientOptions> options, IEventFactory eventFactory, ILogger<EventBusClient> logger, TimeProvider? timeProvider = null)
     {
         logger.LogDebug("Initializing...");
         Options = options.Value;
         Logger = logger;
         EventFactory = eventFactory;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         WatchDog = new PingPongWatchDog(this, WatchDogTimeoutHandler, logger);
         EventReceived += EventBusClient_EventReceived;
 
@@ -286,7 +289,7 @@ public class EventBusClient : IEventBusClient
                         continue;
                     if (evt.Type == EventType.WebSocketEvent && evt is WebSocketEvent wse && wse.IsResponseFailed)
                         Logger.LogError("Failure response: {evt}", wse.ToString());
-                    ReceivingQueue.Add(new EventReceivedEventArgs(evt, DateTimeOffset.Now));
+                    ReceivingQueue.Add(new EventReceivedEventArgs(evt, _timeProvider.GetUtcNow()));
                 }
                 catch ( InvalidOperationException )
                 {

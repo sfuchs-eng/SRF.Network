@@ -37,6 +37,8 @@ namespace SRF.Network.OpenHab.EventBus.Events
 
         public static TypeValuePayload Set<NumericType>(this TypeValuePayload pl, NumericType number) where NumericType : struct
         {
+            if (number is IQuantity quantity)
+                return pl.Set(quantity);
             if (number is ItemStateSwitch)
                 pl.Type = "OnOff";
             else if (number is ItemStateContact)

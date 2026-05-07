@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Knx\SRF.Network.Knx.csproj" />
+    <ProjectReference Include="..\OpenHab\SRF.Network.OpenHab.csproj" />
     <ProjectReference Include="..\WebSocket\SRF.Network.WebSocket.csproj" />
   </ItemGroup>
 
