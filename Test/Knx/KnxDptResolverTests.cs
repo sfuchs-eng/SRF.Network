@@ -23,6 +23,9 @@ public class KnxDptResolverTests
     private sealed class StubDpt : DptBase
     {
         public StubDpt(string id) => Id = new DataPointTypeId(id);
+
+        public override Type ValueType => typeof(int);
+
         public override object ToValue(GroupValue groupValue) => 0;
         public override GroupValue ToGroupValue(object value) => new([]);
     }

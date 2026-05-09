@@ -39,7 +39,7 @@ public static class ExtensionsHosting
         where TConnector : class, IKnxConnection
     {
         services.AddKnxConfig();
-        services.AddKnxCore();
+        //services.AddKnxCore(); called by AddKnxConfig, which also registers the IKnxSystemConfiguration and IDptResolver that depend on core services
 
         services.TryAddSingleton(TimeProvider.System);
 
@@ -106,7 +106,7 @@ public static class ExtensionsHosting
 
         // Infrastructure — all TryAdd (via AddKnxConfig / AddKnxCore), safe to call multiple times.
         services.AddKnxConfig();
-        services.AddKnxCore();
+        //services.AddKnxCore(); called by AddKnxConfig, which also registers the IKnxSystemConfiguration and IDptResolver that depend on core services
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IDptResolver, KnxDptResolver>();
         services.TryAddSingleton<IKnxLibraryInitialization, KnxLibraryInitializationStub>();

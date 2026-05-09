@@ -47,6 +47,8 @@ public class KnxConnectionIntegrationTests
             Id = new DataPointTypeId(dptMain, dptSub);
         }
 
+        public override Type ValueType => _returnValue.GetType();
+
         public override object ToValue(GroupValue groupValue) => _returnValue;
         public override GroupValue ToGroupValue(object value) => new([]);
     }

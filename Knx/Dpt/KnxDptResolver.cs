@@ -11,6 +11,10 @@ namespace SRF.Network.Knx.Dpt;
 /// in the DI service catalog by the consumer. DPT creation is delegated to <see cref="IDptFactory"/>.
 /// Results are cached in memory after the first lookup.
 /// </summary>
+/// <remarks>
+/// The resolver is used by the KNX connectivity provider in the `SRF.Knx` package to resolve the DPT for a group address when processing incoming or outgoing group address events.
+/// It's the lightweight alternative to the more complex <see cref="IKnxSystemConfiguration"/> for resolving DPTs for group addresses, without the need to inject the entire system configuration into performance-sensitive code paths (e.g. processing incoming group address events).
+/// </remarks>
 public class KnxDptResolver : IDptResolver
 {
     private readonly DomainConfiguration _domainConfig;
@@ -50,6 +54,15 @@ public class KnxDptResolver : IDptResolver
             _cache[groupAddress.Address] = dpt;
             _logger.LogTrace("Resolved DPT {Dpt} for group address {GroupAddress} ({Label})", dpt.Id, groupAddress, etsConfig.Label);
             return dpt;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void ClearCache()
+    {
+        lock (_lock)
+        {
+            _cache.Clear();
         }
     }
 }
