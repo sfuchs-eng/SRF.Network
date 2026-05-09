@@ -3,13 +3,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SRF.Knx.Config;
-using SRF.Knx.Core;
 using SRF.Network.Knx.Connection;
 using SRF.Network.Knx.Dpt;
 using SRF.Network.Knx.Hosting;
 using SRF.Network.Knx.IpRouting;
-using SRF.Network.Misc;
 using SRF.Network.Udp;
 using SRF.Network.Udp.Hosting;
 
