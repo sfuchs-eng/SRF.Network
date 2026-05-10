@@ -75,9 +75,9 @@ public class EventBusClient : IEventBusClient
     /// </summary>
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
-        if (Options.Disable)
+        if (!Options.Enable)
         {
-            Logger.LogWarning("OpenHAB Event Bus Client is disabled - not connecting. Queues will accumulate infinitely.");
+            Logger.LogWarning("OpenHAB Event Bus Client is disabled by configuration - not connecting. Queues will accumulate infinitely.");
             while (!cancellationToken.IsCancellationRequested)
                 await Task.Delay(1000 * 60, cancellationToken);
             // must only return once connection gets closed --> Task canceled.

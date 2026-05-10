@@ -4,10 +4,10 @@ namespace SRF.Network.OpenHab.Client
     public class EventBusClientOptions
     {
         /// <summary>
-        /// For offline testing purpose. Prevents connecting to an OpenHAB instance but
-        /// still instanciates related services.
+        /// Enables connecting to an OpenHAB instance.
+        /// Set to <see langword="false"/> for offline testing while still instantiating related services.
         /// </summary>
-        public bool Disable { get; set; } = false;
+        public bool Enable { get; set; } = true;
 
         /// <summary>
         /// Complete OpenHAB server websocket URI used with <see cref="System.Net.WebSockets.ClientWebSocket"/>.
