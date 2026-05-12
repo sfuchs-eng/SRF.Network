@@ -55,5 +55,28 @@ namespace SRF.Network.OpenHab.Client
                 throw new ProtocolException($"OpenHAB API request to '{RestClient.BaseAddress}{ApiItems}' failed.", ex);
             }
         }
+
+        public async Task SetItemStateAsync(string itemName, string state, CancellationToken cancel = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(itemName);
+
+            var path = $"items/{Uri.EscapeDataString(itemName)}/state";
+
+            try
+            {
+                using var content = new StringContent(state ?? string.Empty, System.Text.Encoding.UTF8, "text/plain");
+                using var response = await RestClient.PutAsync(path, content, cancel);
+                response.EnsureSuccessStatusCode();
+            }
+            catch (OperationCanceledException oca)
+            {
+                throw new OperationCanceledException($"{nameof(SetItemStateAsync)} cancelled.", oca, cancel);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "OpenHAB API state write to '{baseUri}{apiUri}' failed.", RestClient.BaseAddress, path);
+                throw new ProtocolException($"OpenHAB API state write to '{RestClient.BaseAddress}{path}' failed.", ex);
+            }
+        }
     }
 }
