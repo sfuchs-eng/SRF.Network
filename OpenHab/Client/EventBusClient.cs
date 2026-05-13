@@ -102,6 +102,9 @@ public class EventBusClient : IEventBusClient
             SendingQueue = new BlockingCollection<IEvent>();
 
         await CreateAndConnectWebSocket(cancellationToken);
+        
+        // Signal that the WebSocket is ready for receiving/transmitting
+        WebSocketReady.Set();
 
         // receive, transmit, ... do things until closure
         KeyValuePair<string, Task>[] ptsk = Array.Empty<KeyValuePair<string, Task>>();

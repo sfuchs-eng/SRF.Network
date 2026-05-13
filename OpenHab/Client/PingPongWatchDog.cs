@@ -56,19 +56,31 @@ namespace SRF.Network.OpenHab.Client
             PongTimeout.Stop();
             InternalTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token);
             TimedOut = false;
-            await Task.WhenAll(new Task[] {
-                PingTransmitter(InternalTokenSource.Token)
-            });
-            Stop();
-            PongTimeout.Stop();
-            if ( TimedOut )
+            
+            // Subscribe to handle pong responses
+            Client.EventReceived += PongEventHandler;
+            
+            try
             {
-                TimeoutHandler?.Invoke(this);
+                await Task.WhenAll(new Task[] {
+                    PingTransmitter(InternalTokenSource.Token)
+                });
             }
-            InternalTokenSource.Cancel();
-            InternalTokenSource.Dispose();
-            InternalTokenSource = null;
-            Logger.LogTrace("Watchdog terminated.");
+            finally
+            {
+                // Unsubscribe from events
+                Client.EventReceived -= PongEventHandler;
+                Stop();
+                PongTimeout.Stop();
+                if ( TimedOut )
+                {
+                    TimeoutHandler?.Invoke(this);
+                }
+                InternalTokenSource.Cancel();
+                InternalTokenSource.Dispose();
+                InternalTokenSource = null;
+                Logger.LogTrace("Watchdog terminated.");
+            }
         }
 
         public void Stop()
@@ -84,7 +96,8 @@ namespace SRF.Network.OpenHab.Client
 
         private void PongEventHandler(object? sender, EventReceivedEventArgs args)
         {
-            if (sender != this || args.Received.Type != EventType.WebSocketEvent || !((args.Received as WebSocketEvent)?.IsPong ?? false))
+            // Verify this is a pong event
+            if (args.Received.Type != EventType.WebSocketEvent || !((args.Received as WebSocketEvent)?.IsPong ?? false))
                 return;
             // it's a PONG -- stop timer before it elapses and the watchdog signals failure.
             PongTimeout.Stop();

@@ -75,10 +75,6 @@ public class UdpConnectionManager : BackgroundService
                     _logger.LogInformation("[{ConnectionName}] UDP client not connected, attempting connection...", _name);
                     await TryConnectAsync(cancellationToken);
                 }
-                else
-                {
-                    _logger.LogTrace("[{ConnectionName}] UDP client is connected", _name);
-                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
