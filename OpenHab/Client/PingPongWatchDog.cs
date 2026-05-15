@@ -74,7 +74,14 @@ namespace SRF.Network.OpenHab.Client
                 PongTimeout.Stop();
                 if ( TimedOut )
                 {
-                    TimeoutHandler?.Invoke(this);
+                    try
+                    {
+                        TimeoutHandler?.Invoke(this);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Watchdog timeout handler failed during shutdown.");
+                    }
                 }
                 InternalTokenSource.Cancel();
                 InternalTokenSource.Dispose();

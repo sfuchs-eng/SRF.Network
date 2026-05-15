@@ -38,7 +38,18 @@ namespace SRF.Network.OpenHab
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             StopConnector?.Cancel();
-            await (RunnerTask ?? Task.CompletedTask);
+            try
+            {
+                await (RunnerTask ?? Task.CompletedTask);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Logger.LogDebug("OpenHabConnector shutdown was canceled by host timeout.");
+            }
+            catch (OperationCanceledException)
+            {
+                Logger.LogTrace("OpenHabConnector terminated by cancellation.");
+            }
             RunnerTask = null;
         }
 
@@ -66,7 +77,16 @@ namespace SRF.Network.OpenHab
                 {
                     Logger.LogWarning(ex, "OpenHAB connection failed. Reconnecting in {reconnectWaitInterval} s.", ReconnectInterval/1000.0);
                 }
-                await Task.Delay(ReconnectInterval);
+
+                try
+                {
+                    await Task.Delay(ReconnectInterval, cancel);
+                }
+                catch ( OperationCanceledException )
+                {
+                    Logger.LogTrace("OpenHabConnector reconnect wait canceled.");
+                    return;
+                }
             }
         }
     }

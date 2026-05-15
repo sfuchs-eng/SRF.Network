@@ -164,7 +164,27 @@ public class UdpMulticastClient : IUdpMulticastClient
         _logger.LogInformation("Disconnecting from UDP multicast group {MulticastAddress}:{Port}",
             _options.MulticastAddress, _options.Port);
 
-        await CleanupAsync();
+        try
+        {
+            await CleanupAsync();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug("UDP multicast cleanup canceled by shutdown token.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("UDP multicast cleanup canceled during shutdown.");
+        }
+        catch (ObjectDisposedException)
+        {
+            _logger.LogDebug("UDP multicast client already disposed during disconnect.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unexpected error during UDP multicast cleanup.");
+        }
+
         IsConnected = false;
         OnConnectionStatusChanged(new UdpConnectionEventArgs(false));
 
@@ -291,7 +311,15 @@ public class UdpMulticastClient : IUdpMulticastClient
                 _logger.LogWarning(ex, "Error while leaving multicast group.");
             }
 
-            _udpClient.Dispose();
+            try
+            {
+                _udpClient.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error while disposing UDP client.");
+            }
+
             _udpClient = null;
         }
 
@@ -582,8 +610,14 @@ public class UdpMulticastClient : IUdpMulticastClient
         {
             if (IsConnected)
             {
-                // Fire and forget - we're disposing
-                _ = DisconnectAsync();
+                try
+                {
+                    DisconnectAsync().GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "UDP disconnect failed during dispose.");
+                }
             }
             _connectLock.Dispose();
         }

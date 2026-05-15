@@ -57,7 +57,24 @@ public class EventBusClient : IEventBusClient
     private void WatchDogTimeoutHandler(PingPongWatchDog obj)
     {
         Logger.LogWarning("OpenHAB event bus websocket connection timed out. No pong response from server. Trying to close with 5s timeout.");
-        Task.Run(async () => await CloseAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token));
+        _ = CloseWithTimeoutAsync(TimeSpan.FromSeconds(5));
+    }
+
+    private async Task CloseWithTimeoutAsync(TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        try
+        {
+            await CloseAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("OpenHAB websocket close timed out after watchdog timeout.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "OpenHAB websocket close after watchdog timeout failed.");
+        }
     }
 
     protected Uri RequestURI { get => new Uri(Options.WebSocket + "?accessToken=" + Options.AccessToken); }
@@ -215,7 +232,7 @@ public class EventBusClient : IEventBusClient
             catch ( Exception e2)
             {
                 Logger.LogError(e2, "Failed to recreate WebSocket or reconnect. Waiting and retrying...");
-                await Task.Delay(Options.ReconnectWaitTime);
+                await Task.Delay(Options.ReconnectWaitTime, cancellationToken);
                 continue;
             }
         }
@@ -241,7 +258,6 @@ public class EventBusClient : IEventBusClient
                 {
                     try
                     {
-
                         cur = ReceivingQueue.Take(cancellation);
                         if (cur != null && !cancellation.IsCancellationRequested)
                         {
@@ -249,11 +265,19 @@ public class EventBusClient : IEventBusClient
                             EventReceived?.Invoke(this, cur);
                         }
                     }
+                    catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                    {
+                        break;
+                    }
                     catch (Exception e)
                     {
                         Logger.LogWarning("Processing of received IEvent {eventText} failed with exception {exceptionType}: {exceptionMessage}", cur?.ToString(), e.GetType().Name, e.Message);
                     }
                 }
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                Logger.LogTrace("{funcName} canceled.", nameof(ReceivingNotifierAsync));
             }
             catch ( Exception ex )
             {
@@ -274,7 +298,9 @@ public class EventBusClient : IEventBusClient
             while ( !ReceivingQueue.IsCompleted && !cancellation.IsCancellationRequested )
             {
                 while ( !WebSocketReady.IsSet )
-                    await Task.Delay(100);
+                {
+                    await Task.Delay(100, cancellation);
+                }
 
                 if (WSClient?.State != WebSocketState.Open)
                 {
@@ -331,7 +357,7 @@ public class EventBusClient : IEventBusClient
         {
             Logger.LogTrace("Waiting for connection to become ready...");
             // there's a glitch if sending too early... status alone doesn't seem sufficient.
-            await Task.Delay(1000);
+            await Task.Delay(1000, token);
 
             Logger.LogTrace("Starting transmitting loop...");
             while ( !SendingQueue.IsCompleted && !token.IsCancellationRequested )
@@ -342,7 +368,7 @@ public class EventBusClient : IEventBusClient
                     while (!WebSocketReady.IsSet && !token.IsCancellationRequested)
                     {
                         // assume websocket is being connected, wait and try again.
-                        await Task.Delay(1000);
+                        await Task.Delay(1000, token);
                     }
                 }
                 if (token.IsCancellationRequested)
@@ -400,10 +426,46 @@ public class EventBusClient : IEventBusClient
     {
         Logger.LogTrace("Closing connection...");
         StopProcessingTokenSource.Cancel();
-        await Task.WhenAll(ProcessingTasks);
+
+        if (!SendingQueue.IsAddingCompleted)
+            SendingQueue.CompleteAdding();
+        if (!ReceivingQueue.IsAddingCompleted)
+            ReceivingQueue.CompleteAdding();
+
+        var currentTaskId = Task.CurrentId;
+        var tasksToAwait = currentTaskId.HasValue
+            ? ProcessingTasks.Where(task => task.Id != currentTaskId.Value).ToArray()
+            : ProcessingTasks.ToArray();
+
+        try
+        {
+            await Task.WhenAll(tasksToAwait);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("One or more OpenHAB background tasks canceled during shutdown.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "One or more OpenHAB background tasks failed during shutdown.");
+        }
+
         ProcessingTasks = new List<Task>(10);
-        await (WSClient?.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Regular closure", cancellationToken)
-            ?? Task.CompletedTask);
+
+        try
+        {
+            await (WSClient?.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Regular closure", cancellationToken)
+                ?? Task.CompletedTask);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("OpenHAB websocket close was canceled during shutdown.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "OpenHAB websocket close failed during shutdown.");
+        }
+
         Logger.LogTrace("Connection closed.");
     }
 

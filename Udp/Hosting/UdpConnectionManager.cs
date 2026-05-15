@@ -210,14 +210,69 @@ public class UdpConnectionManager : BackgroundService
 
         // Wait for background tasks to complete
         if (_connectionTask != null)
-            await _connectionTask.ConfigureAwait(false);
+        {
+            try
+            {
+                await _connectionTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogDebug("[{ConnectionName}] Connection runner shutdown canceled by host.", _name);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("[{ConnectionName}] Connection runner canceled during shutdown.", _name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectionName}] Connection runner failed during shutdown.", _name);
+            }
+        }
 
         if (_sendingTask != null)
-            await _sendingTask.ConfigureAwait(false);
+        {
+            try
+            {
+                await _sendingTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogDebug("[{ConnectionName}] Sending runner shutdown canceled by host.", _name);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("[{ConnectionName}] Sending runner canceled during shutdown.", _name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectionName}] Sending runner failed during shutdown.", _name);
+            }
+        }
 
         // Disconnect the underlying client
         if (Client.IsConnected)
-            await Client.DisconnectAsync(cancellationToken);
+        {
+            try
+            {
+                await Client.DisconnectAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogDebug("[{ConnectionName}] UDP client disconnect canceled by host.", _name);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("[{ConnectionName}] UDP client disconnect canceled during shutdown.", _name);
+            }
+            catch (ObjectDisposedException)
+            {
+                _logger.LogDebug("[{ConnectionName}] UDP client already disposed during shutdown.", _name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectionName}] UDP client disconnect failed during shutdown.", _name);
+            }
+        }
 
         await base.StopAsync(cancellationToken);
         _logger.LogInformation("[{ConnectionName}] UDP Connection Manager stopped", _name);
