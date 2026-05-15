@@ -110,8 +110,10 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                     return Task.CompletedTask;
                 }
                 var dc = knxConfigFactory.GetDomainConfig();
-                var code = knxConfigFactory.GenerateHomeCompanionCode(dc);
-                //TODO: configure a folder and determine the file name from the attributed partial class instead of hardcoding the file name in config and code.
+                var ohc = openHabKnxConfigFactory.GetKnxOpenHabConfig(dc);
+                var code = config.LinkKnxValuesToOpenHabForInitialization
+                    ? knxConfigFactory.GenerateHomeCompanionCode(dc, entries => AddOpenHabItemNamesFromOhConfig(entries, ohc))
+                    : knxConfigFactory.GenerateHomeCompanionCode(dc);
                 File.WriteAllText(config.HomeCompanionCodeGenFile, code, System.Text.Encoding.UTF8);
                 logger.LogInformation("Generated KnxValues source with {count} properties and wrote to '{file}'",
                     dc.GroupAddresses.Count,
@@ -180,6 +182,24 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
             applicationLifetime.StopApplication();
             return Task.CompletedTask;
+        }
+
+        private static void AddOpenHabItemNamesFromOhConfig(Dictionary<string, HomeCompanionAutoGenEntry> entries, KnxOpenHabConfig ohc)
+        {
+            var gaToOhItemName = ohc.Things
+                .SelectMany(t => t.GroupAddresses.Select(ga => new { ga.Address, OhItemName = ga.Item?.Name }))
+                .Where(x => !string.IsNullOrEmpty(x.OhItemName))
+                .ToDictionary(x => x.Address, x => x.OhItemName);
+
+            var entryGADix = entries.ToDictionary(e => new GroupAddress(e.Key), e => e.Value);
+
+            foreach (var entry in entryGADix)
+            {
+                if (gaToOhItemName.TryGetValue(entry.Key, out var ohItemName))
+                {
+                    entry.Value.OpenHabItemName = ohItemName;
+                }
+            }
         }
 
         /// <summary>
