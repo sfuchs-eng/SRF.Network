@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using SRF.Network.OpenHab;
 using SRF.Network.OpenHab.Client;
@@ -81,5 +82,39 @@ public class EventFactoryTests
         Assert.That(
             () => factory.Create<ItemStateChangedEvent>(EventType.ItemCommandEvent),
             Throws.TypeOf<EventException>());
+    }
+
+    [Test]
+    public void BuildEventTypeMap_MapsAllDefinedEventTypes()
+    {
+        var factory = CreateFactory();
+
+        var expected = Enum.GetValues<EventType>().Length;
+
+        Assert.That(factory.EventTypeMap.Count, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Create_FromJsonDocument_DeserializesPayloadCorrectly()
+    {
+        var factory = CreateFactory();
+        const string json = """
+            {
+              "type": "ItemCommandEvent",
+              "topic": "openhab/items/LivingRoomLight/command",
+              "payload": "{\"type\":\"OnOff\",\"value\":\"ON\"}"
+            }
+            """;
+        using var doc = JsonDocument.Parse(json, EventFactory.DefaultJsonDocumentOptions);
+
+        var evt = factory.Create(doc);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(evt, Is.TypeOf<ItemEventTypeValue>());
+            Assert.That(evt.Type, Is.EqualTo(EventType.ItemCommandEvent));
+            Assert.That(evt.Topic, Is.EqualTo("openhab/items/LivingRoomLight/command"));
+            Assert.That(((ItemEventTypeValue)evt).OnOffIsOn(), Is.True);
+        });
     }
 }
