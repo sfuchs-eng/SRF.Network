@@ -48,8 +48,8 @@ public class KnxConnectionTests
         _initializer = Substitute.For<IKnxLibraryInitialization>();
         _dptResolver = Substitute.For<IDptResolver>();
 
-        var options = Substitute.For<IOptions<KnxConfiguration>>();
-        options.Value.Returns(new KnxConfiguration());
+        var options = Substitute.For<IOptions<KnxConnectionOptions>>();
+        options.Value.Returns(new KnxConnectionOptions());
 
         return new KnxConnection(
             _initializer,

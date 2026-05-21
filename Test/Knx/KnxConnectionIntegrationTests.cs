@@ -102,8 +102,8 @@ public class KnxConnectionIntegrationTests
 
         _sendQueue = Substitute.For<IKnxIpRoutingQueue>();
 
-        var options = Substitute.For<IOptions<KnxConfiguration>>();
-        options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
+        var options = Substitute.For<IOptions<KnxConnectionOptions>>();
+        options.Value.Returns(new KnxConnectionOptions { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
 
         var bus = new KnxIpRoutingBus(
             _udpClient, _sendQueue, options,

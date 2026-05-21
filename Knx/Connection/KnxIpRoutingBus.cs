@@ -13,9 +13,8 @@ namespace SRF.Network.Knx.Connection;
 /// standard cEMI L_DATA framing.
 /// <para>
 /// The local KNX individual address used as the source address in outbound frames is read
-/// from <see cref="KnxConfiguration.ConnectionString"/> via the <c>KnxAddress</c> key
-/// (both <c>;</c> and <c>,</c> are accepted as token separators). Example:
-/// <c>"Type=IpRouting;KnxAddress=1.0.255"</c>. Defaults to <c>0.0.1</c> if the key is absent.
+/// from <see cref="KnxConnectionOptions"/> using structured properties first and optional
+/// connection-string fallback for unset values.
 /// </para>
 /// </summary>
 public class KnxIpRoutingBus : IKnxBus
@@ -34,7 +33,7 @@ public class KnxIpRoutingBus : IKnxBus
     public KnxIpRoutingBus(
         IUdpMulticastClient udpClient,
         IKnxIpRoutingQueue sendQueue,
-        IOptions<KnxConfiguration> options,
+        IOptions<KnxConnectionOptions> options,
         IOptions<KnxIpRoutingOptions> routingOptions,
         ILogger<KnxIpRoutingBus> logger,
         TimeProvider timeProvider)
@@ -45,7 +44,7 @@ public class KnxIpRoutingBus : IKnxBus
         _timeProvider   = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _routingOptions = routingOptions?.Value ?? new KnxIpRoutingOptions();
 
-        _localAddress = ParseKnxAddress(options?.Value?.ConnectionString);
+        _localAddress = ParseKnxAddress(options?.Value?.ToEffective().KnxAddress);
 
         _udpClient.ConnectionStatusChanged += OnUdpConnectionStatusChanged;
         _udpClient.MessageReceived += OnUdpMessageReceived;
@@ -165,30 +164,22 @@ public class KnxIpRoutingBus : IKnxBus
     }
 
     /// <summary>
-    /// Parses the <c>KnxAddress</c> token from a connection string
-    /// (<c>"Type=IpRouting;KnxAddress=1.0.255"</c>). Both <c>;</c> and <c>,</c> are accepted as
-    /// token separators. Returns <c>0.0.1</c> if the token is absent or cannot be parsed.
+    /// Parses a KNX individual address string and falls back to <c>0.0.1</c> if invalid.
     /// </summary>
-    private static IndividualAddress ParseKnxAddress(string? connectionString)
+    private static IndividualAddress ParseKnxAddress(string? address)
     {
         const string fallback = "0.0.1";
 
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (string.IsNullOrWhiteSpace(address))
             return new IndividualAddress(fallback);
 
-        foreach (var token in connectionString.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        try
         {
-            var idx = token.IndexOf('=');
-            if (idx < 0) continue;
-            var key = token[..idx].Trim();
-            var val = token[(idx + 1)..].Trim();
-            if (key.Equals("KnxAddress", StringComparison.OrdinalIgnoreCase))
-            {
-                try { return new IndividualAddress(val); }
-                catch { break; }
-            }
+            return new IndividualAddress(address);
         }
-
-        return new IndividualAddress(fallback);
+        catch
+        {
+            return new IndividualAddress(fallback);
+        }
     }
 }

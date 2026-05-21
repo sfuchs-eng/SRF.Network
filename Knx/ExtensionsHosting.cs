@@ -62,9 +62,8 @@ public static class ExtensionsHosting
     /// <para>
     /// Configuration sections (default, where <c>{name}</c> is the <paramref name="name"/> argument):
     /// <list type="bullet">
-    ///   <item><c>Knx</c> — <see cref="SRF.Knx.Config.KnxConfiguration"/> (connection string, ETS file paths, …)</item>
-    ///   <item><c>Udp:Connections:{name}</c> — <c>UdpMulticastOptions</c> (multicast address, port, …)</item>
-    ///   <item><c>Udp:Connections:{name}:ConnectionManager</c> — <c>UdpConnectionManagerOptions</c></item>
+    ///   <item><c>Knx:Connections:{name}</c> — <see cref="KnxConnectionOptions"/> (admin-facing KNX/IP connection options)</item>
+    ///   <item><c>Udp:Connections:{name}</c> — retained UDP transport options (populated from effective KNX options)</item>
     /// </list>
     /// </para>
     /// <para>
@@ -77,7 +76,7 @@ public static class ExtensionsHosting
     /// The connection name used as the DI key for the keyed UDP services and to derive the config section path.
     /// </param>
     /// <param name="configSection">
-    /// Override for the UDP multicast config section. Defaults to <c>Udp:Connections:{name}</c>.
+    /// Override for the KNX connection config section. Defaults to <c>Knx:Connections:{name}</c>.
     /// </param>
     public static IServiceCollection AddKnxIpRouting(
         this IServiceCollection services,
@@ -86,19 +85,54 @@ public static class ExtensionsHosting
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        services.AddUdpMulticastWithConnectionManager(name, configSection);
+        string knxSection = configSection ?? $"{KnxConnectionOptions.DefaultConfigSectionName}:{name}";
 
-        // Forward LocalIpAddress from Knx:ConnectionString into the named UdpMulticastOptions
-        // so that "LocalIpAddress=..." in the connection string drives interface selection.
-        // Config-section values always win: PostConfigure only fills in what is not already set.
+        services.AddOptions<KnxConnectionOptions>(name)
+            .BindConfiguration(knxSection);
+
+        // Keep UDP transport options in place and project KNX admin-facing options into them.
+        services.AddUdpMulticastWithConnectionManager(name);
+
         services.AddOptions<UdpMulticastOptions>(name)
-            .PostConfigure<IOptions<KnxConfiguration>>((opts, knxConfig) =>
+            .PostConfigure<IOptionsMonitor<KnxConnectionOptions>>((opts, knxOptions) =>
             {
-                if (!string.IsNullOrWhiteSpace(opts.LocalIpAddress))
-                    return; // already set via config section — don't override
+                var knx = knxOptions.Get(name).ToEffective();
 
-                if (TryParseConnectionStringToken(knxConfig.Value.ConnectionString, "LocalIpAddress", out var localIp))
-                    opts.LocalIpAddress = localIp;
+                opts.MulticastAddress = knx.MulticastAddress;
+                opts.Port = knx.Port;
+
+                if (!string.IsNullOrWhiteSpace(knx.LocalInterface))
+                    opts.LocalInterface = knx.LocalInterface;
+                if (!string.IsNullOrWhiteSpace(knx.LocalIpAddress))
+                    opts.LocalIpAddress = knx.LocalIpAddress;
+
+                if (knx.TimeToLive.HasValue)
+                    opts.TimeToLive = knx.TimeToLive.Value;
+                if (knx.ReceiveBufferSize.HasValue)
+                    opts.ReceiveBufferSize = knx.ReceiveBufferSize.Value;
+                if (knx.SendBufferSize.HasValue)
+                    opts.SendBufferSize = knx.SendBufferSize.Value;
+                if (knx.ReuseAddress.HasValue)
+                    opts.ReuseAddress = knx.ReuseAddress.Value;
+                if (knx.MulticastLoopback.HasValue)
+                    opts.MulticastLoopback = knx.MulticastLoopback.Value;
+                if (knx.ReceiveTimeout.HasValue)
+                    opts.ReceiveTimeout = knx.ReceiveTimeout.Value;
+            });
+
+        services.AddOptions<UdpConnectionManagerOptions>(name)
+            .PostConfigure<IOptionsMonitor<KnxConnectionOptions>>((opts, knxOptions) =>
+            {
+                var knx = knxOptions.Get(name).ToEffective();
+
+                if (knx.ReconnectInterval.HasValue)
+                    opts.ReconnectInterval = knx.ReconnectInterval.Value;
+                if (knx.SendRetryInterval.HasValue)
+                    opts.SendRetryInterval = knx.SendRetryInterval.Value;
+                if (knx.MaxSendAttempts.HasValue)
+                    opts.MaxSendAttempts = knx.MaxSendAttempts.Value;
+                if (knx.AutoConnect.HasValue)
+                    opts.AutoConnect = knx.AutoConnect.Value;
             });
 
         // Infrastructure — all TryAdd (via AddKnxConfig / AddKnxCore), safe to call multiple times.
@@ -135,7 +169,7 @@ public static class ExtensionsHosting
         {
             var udpClient    = sp.GetRequiredKeyedService<IUdpMulticastClient>(name);
             var sendQueue    = sp.GetRequiredKeyedService<IKnxIpRoutingQueue>(name);
-            var options      = sp.GetRequiredService<IOptions<KnxConfiguration>>();
+            var options      = Options.Create(sp.GetRequiredService<IOptionsMonitor<KnxConnectionOptions>>().Get(name));
             var routingOpts  = sp.GetRequiredService<IOptions<KnxIpRoutingOptions>>();
             var logger       = sp.GetRequiredService<ILogger<KnxIpRoutingBus>>();
             var timeProvider = sp.GetRequiredService<TimeProvider>();
@@ -147,7 +181,7 @@ public static class ExtensionsHosting
             new KnxConnection(
                 sp.GetRequiredService<IKnxLibraryInitialization>(),
                 sp.GetRequiredKeyedService<IKnxBus>(name),
-                sp.GetRequiredService<IOptions<KnxConfiguration>>(),
+                Options.Create(sp.GetRequiredService<IOptionsMonitor<KnxConnectionOptions>>().Get(name)),
                 sp.GetRequiredService<ILogger<KnxConnection>>(),
                 sp.GetRequiredService<IDptResolver>()));
 
@@ -188,41 +222,4 @@ public static class ExtensionsHosting
         return builder;
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    /// <summary>
-    /// Parses a single <c>key=value</c> token from a KNX connection string
-    /// (<c>;</c> and <c>,</c> are accepted as separators). Comparison is case-insensitive.
-    /// </summary>
-    private static bool TryParseConnectionStringToken(
-        string? connectionString,
-        string key,
-        out string value)
-    {
-        value = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(connectionString))
-            return false;
-
-        foreach (var token in connectionString.Split([';', ','],
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var idx = token.IndexOf('=');
-            if (idx < 0)
-                continue;
-
-            var k = token[..idx].Trim();
-            var v = token[(idx + 1)..].Trim();
-
-            if (k.Equals(key, StringComparison.OrdinalIgnoreCase))
-            {
-                value = v;
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

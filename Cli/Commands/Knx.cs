@@ -119,8 +119,8 @@ public class Knx : HostLauncher<Knx.Worker>
 
             if (!didSomething || cmd.PrintKnxConfiguration)
             {
-                var kc = serviceProvider.GetRequiredService<IOptions<SRF.Knx.Config.KnxConfiguration>>();
-                cmd.JsonOutput(new { Knx = kc.Value });
+                var kc = serviceProvider.GetRequiredService<IOptionsMonitor<SRF.Network.Knx.KnxConnectionOptions>>();
+                cmd.JsonOutput(new { Knx = kc.Get("default") });
                 didSomething = true;
             }
             

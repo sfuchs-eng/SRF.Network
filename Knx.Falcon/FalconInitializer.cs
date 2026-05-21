@@ -15,7 +15,7 @@ public class FalconInitializer
     public bool IsSuccessfullyInitialized { get; private set; } = false;
 
     public FalconInitializer(
-        IOptions<KnxConfiguration> options,
+        IOptions<KnxSystemConfigOptions> options,
         IFalconLoggerFactory falconLoggerFactory,
         ILogger<FalconInitializer> logger
         )

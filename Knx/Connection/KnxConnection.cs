@@ -11,7 +11,7 @@ namespace SRF.Network.Knx.Connection;
 /// </summary>
 public class KnxConnection : IKnxConnection
 {
-    private readonly KnxConfiguration config;
+    private readonly KnxConnectionOptions config;
     private readonly ILogger<KnxConnection> logger;
     private readonly IKnxBus knxBus;
     private readonly IDptResolver _dptResolver;
@@ -32,7 +32,7 @@ public class KnxConnection : IKnxConnection
     public KnxConnection(
         IKnxLibraryInitialization knxLibInitializer,
         IKnxBus knxBus,
-        IOptions<KnxConfiguration> options,
+        IOptions<KnxConnectionOptions> options,
         ILogger<KnxConnection> logger,
         IDptResolver dptResolver)
     {

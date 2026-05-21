@@ -51,7 +51,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
     public class Worker(
         KnxConfigurationJuggler cmd,
-        IOptions<KnxConfiguration> options,
+        IOptions<KnxSystemConfigOptions> options,
         IKnxConfigFactory knxConfigFactory,
         IOpenHabKnxConfigFactory openHabKnxConfigFactory,
         IHostApplicationLifetime applicationLifetime,
@@ -61,7 +61,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
     {
         private readonly KnxConfigurationJuggler cmd = cmd;
         private readonly IKnxConfigFactory knxConfigFactory = knxConfigFactory;
-        private readonly KnxConfiguration config = options.Value;
+        private readonly KnxSystemConfigOptions config = options.Value;
         private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
         private readonly ILogger<Worker> logger = logger;
         private readonly IServiceProvider serviceProvider = serviceProvider;

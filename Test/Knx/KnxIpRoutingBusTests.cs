@@ -108,8 +108,8 @@ public class KnxIpRoutingBusTests
         _udpClient.DisconnectAsync(Arg.Any<CancellationToken>())
             .Returns(_ => { connected = false; return Task.CompletedTask; });
 
-        var options = Substitute.For<IOptions<KnxConfiguration>>();
-        options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
+        var options = Substitute.For<IOptions<KnxConnectionOptions>>();
+        options.Value.Returns(new KnxConnectionOptions { ConnectionString = "Type=IpRouting;KnxAddress=1.1.5" });
         var zeroRateOptions = Options.Create(new KnxIpRoutingOptions { BusBitRate = 0 });
 
         _bus = new KnxIpRoutingBus(
@@ -134,8 +134,8 @@ public class KnxIpRoutingBusTests
     [Test]
     public void Constructor_NullUdpClient_ThrowsArgumentNullException()
     {
-        var options = Substitute.For<IOptions<KnxConfiguration>>();
-        options.Value.Returns(new KnxConfiguration());
+        var options = Substitute.For<IOptions<KnxConnectionOptions>>();
+        options.Value.Returns(new KnxConnectionOptions());
         Assert.Throws<ArgumentNullException>(() =>
             new KnxIpRoutingBus(null!, _sendQueue, options, Options.Create(new KnxIpRoutingOptions()), NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
     }
@@ -143,8 +143,8 @@ public class KnxIpRoutingBusTests
     [Test]
     public void Constructor_NullUdpQueue_ThrowsArgumentNullException()
     {
-        var options = Substitute.For<IOptions<KnxConfiguration>>();
-        options.Value.Returns(new KnxConfiguration());
+        var options = Substitute.For<IOptions<KnxConnectionOptions>>();
+        options.Value.Returns(new KnxConnectionOptions());
         Assert.Throws<ArgumentNullException>(() =>
             new KnxIpRoutingBus(_udpClient, null!, options, Options.Create(new KnxIpRoutingOptions()), NullLogger<KnxIpRoutingBus>.Instance, _timeProvider));
     }
@@ -451,8 +451,8 @@ public class KnxIpRoutingBusTests
     [Test]
     public async Task ParseKnxAddress_MissingKnxAddressKey_UsesFallback()
     {
-        var options = Substitute.For<IOptions<KnxConfiguration>>();
-        options.Value.Returns(new KnxConfiguration { ConnectionString = "Type=IpRouting" });
+        var options = Substitute.For<IOptions<KnxConnectionOptions>>();
+        options.Value.Returns(new KnxConnectionOptions { ConnectionString = "Type=IpRouting" });
         var busNoAddress = new KnxIpRoutingBus(
             _udpClient, _sendQueue, options,
             Options.Create(new KnxIpRoutingOptions { BusBitRate = 0 }),
