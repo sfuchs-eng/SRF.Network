@@ -11,12 +11,16 @@ public class PublisherString(string topic, string payload) : IPublisher
 
     public async Task<MqttClientPublishResult> PublishAsync(IMqttClient client, CancellationToken cancel)
     {
-        return await client.PublishStringAsync(
-            topic: Topic,
-            payload: Payload,
-            qualityOfServiceLevel: Options.ServiceLevel,
-            retain: Options.Retain,
-            cancellationToken: cancel
-        );
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic(Topic)
+            .WithPayload(Payload)
+            .WithQualityOfServiceLevel(Options.ServiceLevel)
+            .WithRetainFlag(Options.Retain)
+            .Build();
+
+        if (!string.IsNullOrWhiteSpace(Options.ContentType))
+            message.ContentType = Options.ContentType;
+
+        return await client.PublishAsync(message, cancel);
     }
 }

@@ -13,12 +13,16 @@ public class PublisherJson<TObject>(string topic, TObject payload) : IPublisher 
 
     public async Task<MqttClientPublishResult> PublishAsync(IMqttClient client, CancellationToken cancel)
     {
-        return await client.PublishBinaryAsync(
-            topic: Topic,
-            payload: JsonSerializer.SerializeToUtf8Bytes<TObject>(Payload, Options.JsonOptions),
-            qualityOfServiceLevel: Options.ServiceLevel,
-            retain: Options.Retain,
-            cancellationToken: cancel
-        );
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic(Topic)
+            .WithPayload(JsonSerializer.SerializeToUtf8Bytes<TObject>(Payload, Options.JsonOptions))
+            .WithQualityOfServiceLevel(Options.ServiceLevel)
+            .WithRetainFlag(Options.Retain)
+            .Build();
+
+        if (!string.IsNullOrWhiteSpace(Options.ContentType))
+            message.ContentType = Options.ContentType;
+
+        return await client.PublishAsync(message, cancel);
     }
 }

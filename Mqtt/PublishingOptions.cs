@@ -7,5 +7,6 @@ public class PublishingOptions
 {
     public MqttQualityOfServiceLevel ServiceLevel { get; set; } = MqttQualityOfServiceLevel.ExactlyOnce;
     public bool Retain { get; set; } = false;
+    public string? ContentType { get; set; }
     public JsonSerializerOptions? JsonOptions { get; set; } = null;
 }
