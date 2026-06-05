@@ -19,6 +19,7 @@ public class KnxMessageContext
 
     /// <summary>The decoded typed value produced by <see cref="Dpt"/>, if available.</summary>
     public object? DecodedValue { get; set; }
+    
     //public IoTGroupEventArgs? IoTGroupEventArgs { get; set; }
 
     public KnxMessageContext(GroupEventArgs groupEventArgs, DateTimeOffset receivedAt)
