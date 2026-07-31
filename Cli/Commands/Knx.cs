@@ -37,6 +37,7 @@ public class Knx : HostLauncher<Knx.Worker>
 
     public class Worker(
         Knx cmd,
+        [FromKeyedServices("default")]
         IKnxConnection knxConnection,
         IHostApplicationLifetime applicationLifetime,
         IServiceProvider serviceProvider,
