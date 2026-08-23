@@ -15,7 +15,7 @@ public class KnxSystemConfigOptionsTests
             .AddInMemoryCollection([
                 new("Knx:System:EtsGAExportFile", "/project/GroupAddresses.xml"),
                 new("Knx:System:KnxDomainConfigFile", "/project/KnxDomainConfig.json"),
-                new("Knx:System:HomeCompanionCodeGenFile", "/project/KnxValues.generated.cs"),
+                new("Knx:System:HomeCompanion:KnxValuesCodeGenFilePath", "/project/KnxValues.generated.cs"),
                 new("Knx:System:KnxMasterFolder", "/usr/share/ets/knx-master"),
                 new("Knx:System:LinkKnxValuesToOpenHabForInitialization", "false"),
                 new("Knx:System:OpenHab:BaseConfigFile", "/project/OHBase.json"),
@@ -38,7 +38,7 @@ public class KnxSystemConfigOptionsTests
         {
             Assert.That(opts.EtsGAExportFile, Is.EqualTo("/project/GroupAddresses.xml"));
             Assert.That(opts.KnxDomainConfigFile, Is.EqualTo("/project/KnxDomainConfig.json"));
-            Assert.That(opts.HomeCompanionCodeGenFile, Is.EqualTo("/project/KnxValues.generated.cs"));
+            Assert.That(opts.HomeCompanion.KnxValuesCodeGenFilePath, Is.EqualTo("/project/KnxValues.generated.cs"));
             Assert.That(opts.KnxMasterFolder, Is.EqualTo("/usr/share/ets/knx-master"));
             Assert.That(opts.LinkKnxValuesToOpenHabForInitialization, Is.False);
             Assert.That(opts.OpenHab.BaseConfigFile, Is.EqualTo("/project/OHBase.json"));

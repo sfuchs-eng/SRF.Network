@@ -11,7 +11,7 @@ using SRF.Network.Knx.Connection;
 
 namespace SRF.Network.Cli.Commands;
 
-[CliCommand(Description = "KNX related functions.", Parent = typeof(Root))]
+[CliCommand(Description = "KNX related functions, direct communication. For config see -kc / KnxConfigurationJuggler.", Parent = typeof(Root))]
 public class Knx : HostLauncher<Knx.Worker>
 {
     [CliOption(Alias = "s", Description = "Scan for IP endpoints, then exit.")]

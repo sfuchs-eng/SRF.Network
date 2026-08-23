@@ -11,7 +11,7 @@ using SRF.Knx.Core;
 
 namespace SRF.Network.Cli.Commands;
 
-[CliCommand(Name = "knx-configuration", Alias = "kc", Description = "Displays the KNX configuration.", Parent = typeof(Root))]
+[CliCommand(Name = "knx-configuration", Alias = "kc", Description = "Displays and manipulates the KNX configuration.", Parent = typeof(Root))]
 public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Worker>
 {
     [CliOption(Alias = "n", Description = "Create new domain configuration from ETS project group address export.")]
@@ -103,9 +103,9 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
             if (cmd.HomeCompanionCodeGen)
             {
-                if (string.IsNullOrEmpty(config.HomeCompanionCodeGenFile))
+                if (string.IsNullOrEmpty(config.HomeCompanion.KnxValuesCodeGenFilePath))
                 {
-                    logger.LogError("HomeCompanionCodeGenFile is not configured. Set it in your local SRF.Network.json to the path of HomeCompanion.Knx/KnxValues.generated.cs.");
+                    logger.LogError("KnxValuesCodeGenFilePath is not configured. Set it in your local SRF.Network.json to the path of HomeCompanion.Knx/KnxValues.generated.cs.");
                     applicationLifetime.StopApplication();
                     return Task.CompletedTask;
                 }
@@ -114,10 +114,10 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 var code = config.LinkKnxValuesToOpenHabForInitialization
                     ? knxConfigFactory.GenerateHomeCompanionCode(dc, entries => AddOpenHabItemNamesFromOhConfig(entries, ohc))
                     : knxConfigFactory.GenerateHomeCompanionCode(dc);
-                File.WriteAllText(config.HomeCompanionCodeGenFile, code, System.Text.Encoding.UTF8);
+                File.WriteAllText(config.HomeCompanion.KnxValuesCodeGenFilePath, code, System.Text.Encoding.UTF8);
                 logger.LogInformation("Generated KnxValues source with {count} properties and wrote to '{file}'",
                     dc.GroupAddresses.Count,
-                    config.HomeCompanionCodeGenFile);
+                    config.HomeCompanion.KnxValuesCodeGenFilePath);
                 applicationLifetime.StopApplication();
                 return Task.CompletedTask;
             }
