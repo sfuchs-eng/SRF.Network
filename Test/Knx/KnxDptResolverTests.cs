@@ -5,6 +5,7 @@ using SRF.Knx.Config.Domain;
 using SRF.Knx.Config.ETS5;
 using SRF.Knx.Core;
 using SRF.Knx.Core.DPT;
+using SRF.Knx.Core.Master;
 using SRF.Network.Knx.Dpt;
 
 namespace SRF.Network.Test.Knx;
@@ -22,7 +23,51 @@ public class KnxDptResolverTests
     // A stand-in DptBase implementation for testing (DptBase is abstract)
     private sealed class StubDpt : DptBase
     {
-        public StubDpt(string id) => Id = new DataPointTypeId(id);
+        public StubDpt(string id)
+            : base(new DataPointTypeId(id), CreateMetadata(new DataPointTypeId(id)))
+        {
+        }
+
+        public static StubDpt Create(string id)
+        {
+            var parsedId = new DataPointTypeId(id);
+            return new StubDpt(id)
+            {
+                Id = parsedId,
+                Metadata = CreateMetadata(parsedId),
+            };
+        }
+
+        private static DptMetadata CreateMetadata(DataPointTypeId id)
+        {
+            return new DptMetadata
+            {
+                Id = id,
+                Dpt = new DatapointType
+                {
+                    Id = id.EtsFormat,
+                    Number = id.Main,
+                    Name = "Test DPT",
+                    Text = "Test DPT",
+                    PDT = "PDT_UNSIGNED_CHAR",
+                },
+                Dpst = id.Sub > 0 ? new DatapointSubtype
+                {
+                    Id = id.EtsFormat,
+                    Number = id.Sub,
+                    Name = "Test subtype",
+                    Text = "Test subtype",
+                    PDT = "PDT_UNSIGNED_CHAR",
+                } : null,
+                Pdt = new PropertyDataType
+                {
+                    Id = "PDT_UNSIGNED_CHAR",
+                    Number = PropertyDataTypeNumber.PDT_UNSIGNED_CHAR,
+                    Name = "PDT_UNSIGNED_CHAR",
+                    Size = 1,
+                },
+            };
+        }
 
         public override Type ValueType => typeof(int);
 
@@ -119,7 +164,7 @@ public class KnxDptResolverTests
         etsConfig.DPTs = "DPST-1-1"; // DPT 1.001 = boolean
         _domainConfig.GroupAddresses[address.Address] = etsConfig;
 
-        var expectedDpt = new StubDpt("DPST-1-1") { Id = new DataPointTypeId(1, 1) };
+        var expectedDpt = StubDpt.Create("DPST-1-1");
         _dptFactory.Get(1, 1).Returns(expectedDpt);
 
         var result = _resolver.GetDpt(address);
@@ -135,7 +180,7 @@ public class KnxDptResolverTests
         etsConfig.DPTs = "DPST-9-1"; // DPT 9.001 = temperature °C
         _domainConfig.GroupAddresses[address.Address] = etsConfig;
 
-        var dpt = new StubDpt("DPST-9-1") { Id = new DataPointTypeId(9, 1) };
+        var dpt = StubDpt.Create("DPST-9-1");
         _dptFactory.Get(9, 1).Returns(dpt);
 
         _resolver.GetDpt(address);
@@ -155,7 +200,7 @@ public class KnxDptResolverTests
         etsConfig.DPTs = "DPST-5-1";
         _domainConfig.GroupAddresses[address.Address] = etsConfig;
 
-        var dpt = new StubDpt("DPST-5-1") { Id = new DataPointTypeId(5, 1) };
+        var dpt = StubDpt.Create("DPST-5-1");
         _dptFactory.Get(5, 1).Returns(dpt);
 
         var first = _resolver.GetDpt(address);
@@ -172,7 +217,7 @@ public class KnxDptResolverTests
         etsConfig.DPTs = "DPST-5-1";
         _domainConfig.GroupAddresses[address.Address] = etsConfig;
 
-        var dpt = new StubDpt("DPST-5-1") { Id = new DataPointTypeId(5, 1) };
+        var dpt = StubDpt.Create("DPST-5-1");
         _dptFactory.Get(5, 1).Returns(dpt);
 
         _resolver.GetDpt(address);
@@ -196,8 +241,8 @@ public class KnxDptResolverTests
         _domainConfig.GroupAddresses[addr1.Address] = etc1;
         _domainConfig.GroupAddresses[addr2.Address] = etc2;
 
-        var dpt1 = new StubDpt("DPST-1-1") { Id = new DataPointTypeId(1, 1) };
-        var dpt2 = new StubDpt("DPST-9-1") { Id = new DataPointTypeId(9, 1) };
+        var dpt1 = StubDpt.Create("DPST-1-1");
+        var dpt2 = StubDpt.Create("DPST-9-1");
         _dptFactory.Get(1, 1).Returns(dpt1);
         _dptFactory.Get(9, 1).Returns(dpt2);
 
@@ -226,7 +271,7 @@ public class KnxDptResolverTests
         etsConfig.DPTs = dptString;
         _domainConfig.GroupAddresses[address.Address] = etsConfig;
 
-        var dpt = new StubDpt(dptString) { Id = new DataPointTypeId(expectedMain, expectedSub) };
+        var dpt = StubDpt.Create(dptString);
         _dptFactory.Get(expectedMain, expectedSub).Returns(dpt);
 
         _resolver.GetDpt(address);
@@ -245,7 +290,7 @@ public class KnxDptResolverTests
         etsConfig.DPTs = dptString;
         _domainConfig.GroupAddresses[address.Address] = etsConfig;
 
-        var expectedDpt = new StubDpt(dptString) { Id = new DataPointTypeId(main, sub) };
+        var expectedDpt = StubDpt.Create(dptString);
         _dptFactory.Get(main, sub).Returns(expectedDpt);
 
         var result = _resolver.GetDpt(address);

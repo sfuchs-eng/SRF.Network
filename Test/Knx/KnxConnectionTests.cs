@@ -5,6 +5,7 @@ using NSubstitute;
 using SRF.Knx.Config;
 using SRF.Knx.Core;
 using SRF.Knx.Core.DPT;
+using SRF.Knx.Core.Master;
 using SRF.Network.Knx;
 using SRF.Network.Knx.Connection;
 using SRF.Network.Knx.Messages;
@@ -26,11 +27,53 @@ public class KnxConnectionTests
     private sealed class StubDpt : DptBase
     {
         private readonly object _returnValue;
-        [SetsRequiredMembers]
+
         public StubDpt(object returnValue = null!, int dptMain = 1, int dptSub = 1)
+            : base(new DataPointTypeId(dptMain, dptSub), CreateMetadata(dptMain, dptSub))
         {
             _returnValue = returnValue ?? 42;
-            Id = new DataPointTypeId(dptMain, dptSub);
+        }
+
+        public static StubDpt Create(object returnValue = null!, int dptMain = 1, int dptSub = 1)
+        {
+            var id = new DataPointTypeId(dptMain, dptSub);
+            return new StubDpt(returnValue, dptMain, dptSub)
+            {
+                Id = id,
+                Metadata = CreateMetadata(dptMain, dptSub),
+            };
+        }
+
+        private static DptMetadata CreateMetadata(int dptMain, int dptSub)
+        {
+            var id = new DataPointTypeId(dptMain, dptSub);
+            return new DptMetadata
+            {
+                Id = id,
+                Dpt = new DatapointType
+                {
+                    Id = id.EtsFormat,
+                    Number = dptMain,
+                    Name = "Test DPT",
+                    Text = "Test DPT",
+                    PDT = "PDT_UNSIGNED_CHAR",
+                },
+                Dpst = dptSub > 0 ? new DatapointSubtype
+                {
+                    Id = id.EtsFormat,
+                    Number = dptSub,
+                    Name = "Test subtype",
+                    Text = "Test subtype",
+                    PDT = "PDT_UNSIGNED_CHAR",
+                } : null,
+                Pdt = new PropertyDataType
+                {
+                    Id = "PDT_UNSIGNED_CHAR",
+                    Number = PropertyDataTypeNumber.PDT_UNSIGNED_CHAR,
+                    Name = "PDT_UNSIGNED_CHAR",
+                    Size = 1,
+                },
+            };
         }
 
         public override Type ValueType => _returnValue.GetType();
@@ -186,7 +229,7 @@ public class KnxConnectionTests
         await _connection.ConnectAsync();
 
         var expectedDecodedValue = 42;
-        var dpt = new StubDpt(expectedDecodedValue);
+        var dpt = StubDpt.Create(expectedDecodedValue);
         var destAddress = new GroupAddress("0/0/1");
         _dptResolver.GetDpt(Arg.Any<GroupAddress>()).Returns(dpt);
 
