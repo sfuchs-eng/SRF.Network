@@ -67,27 +67,27 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
         private readonly IServiceProvider serviceProvider = serviceProvider;
         private readonly IOpenHabKnxConfigFactory openHabKnxConfigFactory = openHabKnxConfigFactory;
 
-        protected override Task ExecuteAsync(CancellationToken stoppingToken)
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             if (cmd.RemoveFreshFlag)
             {
                 RemoveFreshFlagFromConfigurations();
                 applicationLifetime.StopApplication();
-                return Task.CompletedTask;
+                return;
             }
 
             if (cmd.BatchCreateChannels)
             {
                 BatchCreateChannelEntries();
                 applicationLifetime.StopApplication();
-                return Task.CompletedTask;
+                return;
             }
 
             if (!string.IsNullOrEmpty(cmd.LegacyGACFileName))
             {
                 ImportLegacyGAC();
                 applicationLifetime.StopApplication();
-                return Task.CompletedTask;
+                return;
             }
 
             if (cmd.CreateDomainConfigFromEtsExport)
@@ -98,28 +98,12 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                     config.EtsGAExportFile,
                     config.KnxDomainConfigFile);
                 applicationLifetime.StopApplication();
-                return Task.CompletedTask;
+                return;
             }
 
             if (cmd.HomeCompanionCodeGen)
             {
-                if (string.IsNullOrEmpty(config.HomeCompanion.KnxValuesCodeGenFilePath))
-                {
-                    logger.LogError("KnxValuesCodeGenFilePath is not configured. Set it in your local SRF.Network.json to the path of HomeCompanion.Knx/KnxValues.generated.cs.");
-                    applicationLifetime.StopApplication();
-                    return Task.CompletedTask;
-                }
-                var dc = knxConfigFactory.GetDomainConfig();
-                var ohc = openHabKnxConfigFactory.GetKnxOpenHabConfig(dc);
-                var code = config.LinkKnxValuesToOpenHabForInitialization
-                    ? knxConfigFactory.GenerateHomeCompanionCode(dc, entries => AddOpenHabItemNamesFromOhConfig(entries, ohc))
-                    : knxConfigFactory.GenerateHomeCompanionCode(dc);
-                File.WriteAllText(config.HomeCompanion.KnxValuesCodeGenFilePath, code, System.Text.Encoding.UTF8);
-                logger.LogInformation("Generated KnxValues source with {count} properties and wrote to '{file}'",
-                    dc.GroupAddresses.Count,
-                    config.HomeCompanion.KnxValuesCodeGenFilePath);
-                applicationLifetime.StopApplication();
-                return Task.CompletedTask;
+                logger.LogError("HomeCompanion code generation has moved to HomeCompanion.Support.Knx.HomeCompanionKnxConfigFactory.UpdateHomeCompanionCodeFilesAsync(). Please use HomeCompanion.Cli to invoke it.");
             }
 
             if (cmd.UpdateDomainConfigFromEtsExport || cmd.UdpateOpenHabConfig || cmd.UpdateOpenHabConfigMetaOnly)
@@ -143,7 +127,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 try
                 {
                     logger.LogTrace("Loading existing OpenHAB KNX configuration file.");
-                    ohc = of.GetKnxOpenHabConfig(dc);
+                    ohc = of.Get(dc);
                     configSuccess = true;
                 }
                 catch (Exception ex)
@@ -157,7 +141,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                     logger.LogTrace("Identifying and applying configuration updates to OpenHAB KNX configuration.");
                     var updates = of.IdentifyConfigurationUpdates(dc, ohc);
                     of.ApplyConfigurationUpdates(updates, ohc);
-                    of.SaveBaseConfig(ohc);
+                    of.Save(ohc);
                 }
                 else
                 {
@@ -166,11 +150,11 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
                 if ( cmd.UdpateOpenHabConfig )
                 {
-                    of.WriteOHConfigFiles(ohc);
+                    await of.WriteOpenHabConfigFilesAsync(ohc);
                 }
 
                 applicationLifetime.StopApplication();
-                return Task.CompletedTask;
+                return;
             }
 
             logger.LogInformation("KNX Configuration:");
@@ -181,25 +165,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 ));
 
             applicationLifetime.StopApplication();
-            return Task.CompletedTask;
-        }
-
-        private static void AddOpenHabItemNamesFromOhConfig(Dictionary<string, HomeCompanionAutoGenEntry> entries, KnxOpenHabConfig ohc)
-        {
-            var gaToOhItemName = ohc.Things
-                .SelectMany(t => t.GroupAddresses.Select(ga => new { ga.Address, OhItemName = ga.Item?.Name }))
-                .Where(x => !string.IsNullOrEmpty(x.OhItemName))
-                .ToDictionary(x => x.Address, x => x.OhItemName);
-
-            var entryGADix = entries.ToDictionary(e => new GroupAddress(e.Key), e => e.Value);
-
-            foreach (var entry in entryGADix)
-            {
-                if (gaToOhItemName.TryGetValue(entry.Key, out var ohItemName))
-                {
-                    entry.Value.OpenHabItemName = ohItemName;
-                }
-            }
+            return;
         }
 
         /// <summary>
@@ -225,7 +191,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
 
                 // Remove Fresh flag from OpenHAB configuration
                 var of = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>();
-                var ohConfig = of.GetKnxOpenHabConfig(domainConfig);
+                var ohConfig = of.Get(domainConfig);
                 int ohGACount = 0;
                 foreach (var thing in ohConfig.Things)
                 {
@@ -238,7 +204,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                         }
                     }
                 }
-                of.SaveBaseConfig(ohConfig);
+                of.Save(ohConfig);
                 logger.LogInformation("Removed Fresh flag from {count} group addresses in OpenHAB configuration.", ohGACount);
                 logger.LogInformation("Successfully removed Fresh flag from configurations.");
             }
@@ -280,7 +246,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 try
                 {
                     logger.LogTrace("Loading existing OpenHAB KNX configuration file.");
-                    ohc = of.GetKnxOpenHabConfig(dc);
+                    ohc = of.Get(dc);
                     configSuccess = true;
                 }
                 catch (Exception ex)
@@ -358,7 +324,7 @@ public class KnxConfigurationJuggler : HostLauncher<KnxConfigurationJuggler.Work
                 }
 
                 // Save the updated OpenHAB configuration
-                of.SaveBaseConfig(ohc);
+                of.Save(ohc);
                 
                 logger.LogInformation("Batch channel updates completed: {created} channels updated out of {processed} group addresses processed.",
                     channelsChanged, channelsProcessed);

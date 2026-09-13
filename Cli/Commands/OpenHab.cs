@@ -57,7 +57,7 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
             // get KNX configuration from the service provider and config files, not from OpenHAB (would be better, might be something for the future)
             var knxConfig = serviceProvider.GetRequiredService<IKnxConfigFactory>().GetDomainConfig();
             var openHabKnxConfig = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>()
-                .GetKnxOpenHabConfig(knxConfig);
+                .Get(knxConfig);
             var openHabKnxItemsNames = openHabKnxConfig.Things
                 .SelectMany(t => t.GroupAddresses)
                 .Select(c => c.Item?.Name ?? c.Name)
