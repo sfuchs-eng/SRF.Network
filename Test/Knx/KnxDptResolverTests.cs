@@ -69,7 +69,7 @@ public class KnxDptResolverTests
             };
         }
 
-        public override Type ValueType => typeof(int);
+        public override Type BaseType => typeof(int);
 
         public override object ToValue(GroupValue groupValue) => 0;
         public override GroupValue ToGroupValue(object value) => new([]);

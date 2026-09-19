@@ -76,7 +76,7 @@ public class KnxConnectionTests
             };
         }
 
-        public override Type ValueType => _returnValue.GetType();
+        public override Type BaseType => _returnValue.GetType();
 
         public override object ToValue(GroupValue groupValue) => _returnValue;
         public override GroupValue ToGroupValue(object value) => new([]);
