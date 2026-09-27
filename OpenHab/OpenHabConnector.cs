@@ -30,6 +30,7 @@ namespace SRF.Network.OpenHab
         {
             if (IsRunning)
                 throw new Client.ConnectionException("Double start attempt.");
+            Logger.LogTrace("Starting OpenHAB connector background loop (ReconnectInterval={ReconnectIntervalMs} ms).", ReconnectInterval);
             StopConnector = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             RunnerTask = Run(StopConnector.Token);
             await Task.CompletedTask;
@@ -37,6 +38,7 @@ namespace SRF.Network.OpenHab
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            Logger.LogTrace("Stopping OpenHAB connector background loop.");
             StopConnector?.Cancel();
             try
             {
@@ -51,6 +53,7 @@ namespace SRF.Network.OpenHab
                 Logger.LogTrace("OpenHabConnector terminated by cancellation.");
             }
             RunnerTask = null;
+            Logger.LogTrace("OpenHAB connector background loop stopped.");
         }
 
         public bool IsRunning {
@@ -66,7 +69,9 @@ namespace SRF.Network.OpenHab
             {
                 try
                 {
+                    Logger.LogTrace("Attempting OpenHAB websocket connect.");
                     await Client.ConnectAsync(cancel);
+                    Logger.LogTrace("OpenHAB websocket session ended. Reconnect loop continues unless stopping.");
                 }
                 catch ( OperationCanceledException )
                 {

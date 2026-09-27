@@ -8,6 +8,7 @@ using SRF.Knx.Config;
 using SRF.Knx.Config.OpenHab;
 using SRF.Knx.Core;
 using SRF.Network.OpenHab;
+using SRF.Network.OpenHab.Client;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -35,6 +36,7 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
     public class Worker(
             OpenHab cmd,
             IRestApiClient openhabRestApiClient,
+            IEventBusClient eventBusClient,
             IHostApplicationLifetime applicationLifetime,
             ILogger<Worker> logger,
             IServiceProvider serviceProvider
@@ -42,6 +44,7 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
     {
         private readonly OpenHab cmd = cmd;
         private readonly IRestApiClient openhabRestApiClient = openhabRestApiClient;
+        private readonly IEventBusClient eventBusClient = eventBusClient;
         private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
         private readonly ILogger<Worker> logger = logger;
         private readonly IServiceProvider serviceProvider = serviceProvider;
@@ -122,22 +125,47 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
                     Console.WriteLine($"Item: {item.Name}, Type: {item.Type}, State: {item.State.Clamp(100)}");
                 }
                 applicationLifetime.StopApplication();
+                return;
             }
+
             if (cmd.UpdateHomeCompanionConfiguration)
             {
                 await GenerateOpenHabValuesCodeAsync(stoppingToken);
                 applicationLifetime.StopApplication();
+                return;
             }
-            else if (cmd.LogEvents)
+
+            if (cmd.LogEvents)
             {
-                logger.LogInformation("Logging events is not implemented yet.");
+                EventHandler<EventReceivedEventArgs> onEvent = (_, e) =>
+                {
+                    var type = e.Received.Type;
+                    var source = e.Received.Source ?? "<none>";
+                    Console.WriteLine($"[{e.When:O}] {type}: topic={e.Received.Topic}, source={source}, payload={e.Received.PayloadJson.Clamp(200, true)}");
+                };
+
+                eventBusClient.EventReceived += onEvent;
+                logger.LogInformation("Logging OpenHAB websocket events. Press Ctrl+C to stop.");
+
+                try
+                {
+                    // Connection lifecycle is managed by OpenHabConnector hosted service.
+                    await Task.Delay(Timeout.Infinite, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                }
+                finally
+                {
+                    eventBusClient.EventReceived -= onEvent;
+                }
+
                 applicationLifetime.StopApplication();
+                return;
             }
-            else
-            {
-                logger.LogInformation("No action specified. Use --help for more information.");
-                applicationLifetime.StopApplication();
-            }
+
+            logger.LogInformation("No action specified. Use --help for more information.");
+            applicationLifetime.StopApplication();
         }
     }
 }

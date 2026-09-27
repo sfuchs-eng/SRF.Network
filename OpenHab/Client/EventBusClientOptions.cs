@@ -13,7 +13,7 @@ namespace SRF.Network.OpenHab.Client
         /// Complete OpenHAB server websocket URI used with <see cref="System.Net.WebSockets.ClientWebSocket"/>.
         /// Use "wss://localhost:8443/ws" for SSL and "ws://localhost:8080/ws" for a plain connection to default ports.
         /// </summary>
-        public string WebSocket { get; set; } = "ws://localhost:8080/ws";
+        public string WebSocket { get; set; } = "ws://localhost:8080/ws/events";
 
         /// <summary>
         /// OpenHAB server rest api base URI, with trailing slash.

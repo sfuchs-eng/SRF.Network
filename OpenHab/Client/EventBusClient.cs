@@ -37,6 +37,8 @@ public class EventBusClient : IEventBusClient
 
     public string[] AppliedSourceFilters { get; protected set; } = [];
     public EventType[] AppliedTypeFilters { get; protected set; } = [];
+    private string[] DesiredSourceFilters { get; set; } = [];
+    private EventType[] DesiredTypeFilters { get; set; } = [];
 
     private ManualResetEventSlim WebSocketReady { get; } = new ManualResetEventSlim(false);
     private ManualResetEventSlim WebSocketReconnectRequired { get; set; } = new ManualResetEventSlim(false);
@@ -77,7 +79,7 @@ public class EventBusClient : IEventBusClient
         }
     }
 
-    protected Uri RequestURI { get => new Uri(Options.WebSocket + "?accessToken=" + Options.AccessToken); }
+    protected Uri RequestURI { get => BuildRequestUri(); }
 
     private List<Task> ProcessingTasks { get; set; } = new List<Task>();
     protected CancellationTokenSource StopProcessingTokenSource { get; private set; } = new CancellationTokenSource();
@@ -154,6 +156,27 @@ public class EventBusClient : IEventBusClient
 
     private bool IsWebSocketConnectedByState { get => WSClient?.State == WebSocketState.Open || WSClient?.State == WebSocketState.Connecting; }
 
+    private Uri BuildRequestUri()
+    {
+        var uriBuilder = new UriBuilder(Options.WebSocket);
+        var path = string.IsNullOrWhiteSpace(uriBuilder.Path) ? "/ws/events" : uriBuilder.Path.TrimEnd('/');
+
+        if (string.IsNullOrWhiteSpace(path) || path == "/")
+            path = "/ws/events";
+        else if (path.Equals("/ws", StringComparison.OrdinalIgnoreCase))
+            path = "/ws/events";
+
+        uriBuilder.Path = path;
+
+        var escapedAccessToken = Uri.EscapeDataString(Options.AccessToken ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(uriBuilder.Query))
+            uriBuilder.Query = $"accessToken={escapedAccessToken}";
+        else
+            uriBuilder.Query = uriBuilder.Query.TrimStart('?') + $"&accessToken={escapedAccessToken}";
+
+        return uriBuilder.Uri;
+    }
+
     private async Task CreateAndConnectWebSocket(CancellationToken cancellationToken)
     {
         try
@@ -180,11 +203,32 @@ public class EventBusClient : IEventBusClient
             throw new ConnectionException($"Failed to connect to OpenHAB at '{Options.WebSocket}' with access token.");
         }
 
-        // connection config
+        ApplyPersistentFiltersAfterConnect();
+    }
+
+    private void ApplyPersistentFiltersAfterConnect()
+    {
+        // Re-apply persisted type/source filters after each websocket (re)connect.
+        // openHAB filter state is connection-scoped and therefore must be restored.
+        if (DesiredTypeFilters.Length > 0)
+        {
+            Logger.LogTrace("Re-applying OpenHAB websocket type filter after connect: {types}",
+                string.Join(", ", DesiredTypeFilters.Select(t => t.ToString())));
+            _ = SetTypeFilterAsync(DesiredTypeFilters);
+        }
+
+        if (DesiredSourceFilters.Length > 0)
+        {
+            Logger.LogTrace("Re-applying OpenHAB websocket source filter after connect: {sources}",
+                string.Join(", ", DesiredSourceFilters));
+            _ = SetSourceFilterAsync(DesiredSourceFilters);
+            return;
+        }
+
+        // Backward-compatible default: optionally filter out own source when no explicit source filter was configured.
         if (Options.FilterSource)
         {
-            // don't want to hear myself...
-            _ = SetSourceFilterAsync(new string[] { Options.SourceEntity });
+            _ = SetSourceFilterAsync(new[] { Options.SourceEntity });
         }
     }
 
@@ -345,6 +389,7 @@ public class EventBusClient : IEventBusClient
 
     public void EnqueueTransmit(IEvent sendEvent)
     {
+        TrackDesiredFilters(sendEvent);
         SendingQueue.Add(sendEvent);
     }
 
@@ -471,6 +516,8 @@ public class EventBusClient : IEventBusClient
 
     public async Task SendAsync(IEvent sendEvent, CancellationToken cancellationToken)
     {
+        TrackDesiredFilters(sendEvent);
+
         var mcts = CancellationTokenSource.CreateLinkedTokenSource(StopProcessingTokenSource.Token, cancellationToken);
         sendEvent.ID = (++TransmitPacketCounter).ToString();
         sendEvent.Source = Options.SourceEntity;
@@ -482,6 +529,29 @@ public class EventBusClient : IEventBusClient
             WebSocketMessageType.Text,
             true, mcts.Token
             ) ?? throw new ConnectionException($"No websocket object for sending {nameof(IEvent)}."));
+    }
+
+    private void TrackDesiredFilters(IEvent sendEvent)
+    {
+        if (sendEvent is not WebSocketEvent ws)
+            return;
+
+        if (ws.IsFilterType)
+        {
+            var typeNames = JsonSerializer.Deserialize<string[]>(ws.PayloadJson, EventFactory.JsonOptions) ?? [];
+            var parsedTypes = typeNames
+                .Select(typeName => Enum.TryParse(typeName, out EventType parsed) ? parsed : EventType.Unrecognized)
+                .Where(t => t is not EventType.Unrecognized and not EventType.Undefined)
+                .Distinct()
+                .ToArray();
+
+            if (parsedTypes.Length > 0)
+                DesiredTypeFilters = parsedTypes;
+        }
+        else if (ws.IsFilterSource)
+        {
+            DesiredSourceFilters = JsonSerializer.Deserialize<string[]>(ws.PayloadJson, EventFactory.JsonOptions) ?? [];
+        }
     }
 
     /// <summary>
