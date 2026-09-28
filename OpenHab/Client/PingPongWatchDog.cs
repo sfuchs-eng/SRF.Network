@@ -112,19 +112,29 @@ namespace SRF.Network.OpenHab.Client
 
         private async Task PingTransmitter(CancellationToken token)
         {
+            Logger.LogTrace("Watchdog ping loop started. Ping interval={PingSecs}s, timeout={PongTimeout}s.", PingSecs, PongTimeout.Interval / 1000.0);
             while (!token.IsCancellationRequested)
             {
                 if (Client.WSClient?.State == WebSocketState.Open)
                 {
                     var ping = Client.EventFactory.CreatePing();
+                    Logger.LogTrace("Watchdog sending PING on websocket state {State}.", Client.WSClient.State);
                     await Client.SendAsync(ping, token);
                     if (!PongTimeout.Enabled)
+                    {
+                        Logger.LogTrace("Watchdog timer started for PONG timeout.");
                         PongTimeout.Start();
+                    }
+                }
+                else
+                {
+                    Logger.LogDebug("Watchdog skipping PING because websocket state={State}.", Client.WSClient?.State ?? WebSocketState.None);
                 }
                 if ( Client.WSClient == null || Client.WSClient?.State == WebSocketState.Closed || Client.WSClient?.State == WebSocketState.Aborted)
                     break;
                 await Task.Delay(5000, token);
             }
+            Logger.LogTrace("Watchdog ping loop ended.");
         }
     }
 }

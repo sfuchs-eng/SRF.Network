@@ -53,6 +53,12 @@ namespace SRF.Network.OpenHab.EventBus
         ItemStateEvent,
 
         /// <summary>
+        /// The state of an item was updated asynchronously and includes lastStateUpdate metadata.
+        /// Topic: openhab/items/{itemName}/stateupdated
+        /// </summary>
+        ItemStateUpdatedEvent,
+
+        /// <summary>
         /// The state of an item predicted to be updated.
         /// Topic: openhab/items/{itemName}/statepredicted
         /// </summary>
@@ -63,6 +69,12 @@ namespace SRF.Network.OpenHab.EventBus
         /// Topic: openhab/items/{itemName}/statechanged
         /// </summary>
         ItemStateChangedEvent,
+
+        /// <summary>
+        /// A group state was updated.
+        /// Topic: openhab/items/{groupName}/{memberName}/stateupdated
+        /// </summary>
+        GroupStateUpdatedEvent,
 
         /// <summary>
         /// The state of a group item has changed through a member.

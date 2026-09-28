@@ -30,6 +30,20 @@ public class EventBusClient : IEventBusClient
 
     public bool IsConnected { get => WSClient?.State == WebSocketState.Open; }
 
+    public static EventType[] GetDefaultTypeFilters() =>
+    [
+        EventType.ItemStateEvent,
+        EventType.ItemStateUpdatedEvent,
+        EventType.ItemStateChangedEvent,
+        EventType.ItemStatePredictedEvent,
+        EventType.ItemCommandEvent,
+        EventType.ItemAddedEvent,
+        EventType.ItemRemovedEvent,
+        EventType.ItemUpdatedEvent,
+        EventType.GroupStateUpdatedEvent,
+        EventType.GroupItemStateChangedEvent
+    ];
+
     protected ArraySegment<byte> Buffer { get; set; }
     //protected JsonDocumentOptions ReceivingJsonOptions { get; set; }
 
@@ -40,8 +54,8 @@ public class EventBusClient : IEventBusClient
     private string[] DesiredSourceFilters { get; set; } = [];
     private EventType[] DesiredTypeFilters { get; set; } = [];
 
-    private ManualResetEventSlim WebSocketReady { get; } = new ManualResetEventSlim(false);
-    private ManualResetEventSlim WebSocketReconnectRequired { get; set; } = new ManualResetEventSlim(false);
+    private SemaphoreSlim WebSocketReady { get; } = new SemaphoreSlim(0, 1);
+    private SemaphoreSlim WebSocketReconnectRequired { get; set; } = new SemaphoreSlim(0, 1);
 
     public EventBusClient(IOptions<EventBusClientOptions> options, IEventFactory eventFactory, ILogger<EventBusClient> logger, TimeProvider? timeProvider = null)
     {
@@ -79,7 +93,8 @@ public class EventBusClient : IEventBusClient
         }
     }
 
-    protected Uri RequestURI { get => BuildRequestUri(); }
+    protected Uri RequestURI { get => BuildRequestUri(includeAccessToken: true); }
+    protected Uri RequestURINoToken { get => BuildRequestUri(includeAccessToken: false); }
 
     private List<Task> ProcessingTasks { get; set; } = new List<Task>();
     protected CancellationTokenSource StopProcessingTokenSource { get; private set; } = new CancellationTokenSource();
@@ -121,14 +136,18 @@ public class EventBusClient : IEventBusClient
             SendingQueue = new BlockingCollection<IEvent>();
 
         await CreateAndConnectWebSocket(cancellationToken);
-        
+
+        Logger.LogInformation("OpenHAB websocket connected successfully to {RequestUri}.", RequestURI);
+
         // Signal that the WebSocket is ready for receiving/transmitting
-        WebSocketReady.Set();
+        if (WebSocketReady.CurrentCount == 0)
+            WebSocketReady.Release();
 
         // receive, transmit, ... do things until closure
         KeyValuePair<string, Task>[] ptsk = Array.Empty<KeyValuePair<string, Task>>();
         try
         {
+            Logger.LogTrace("Starting OpenHAB background workers for websocket lifecycle: reconnect, receive, transmit, notify, watchdog.");
             ptsk = new KeyValuePair<string, Task>[]
             {
                 new KeyValuePair<string, Task>(nameof(WebSocketRecreator), WebSocketRecreator(StopProcessingTokenSource.Token)),
@@ -137,6 +156,10 @@ public class EventBusClient : IEventBusClient
                 new KeyValuePair<string, Task>(nameof(TransmittingLoopAsync), TransmittingLoopAsync(StopProcessingTokenSource.Token)),
                 new KeyValuePair<string, Task>(nameof(WatchDog.Run), WatchDog.Run(StopProcessingTokenSource.Token))
             };
+            foreach (var task in ptsk)
+            {
+                Logger.LogTrace("Background worker started: {WorkerName}, status={TaskStatus}", task.Key, task.Value.Status);
+            }
             ProcessingTasks.AddRange(ptsk.Select(p => p.Value));
             await Task.WhenAll(ptsk.Select(p => p.Value));
             IsActive = false;
@@ -156,7 +179,7 @@ public class EventBusClient : IEventBusClient
 
     private bool IsWebSocketConnectedByState { get => WSClient?.State == WebSocketState.Open || WSClient?.State == WebSocketState.Connecting; }
 
-    private Uri BuildRequestUri()
+    private Uri BuildRequestUri(bool includeAccessToken = true)
     {
         var uriBuilder = new UriBuilder(Options.WebSocket);
         var path = string.IsNullOrWhiteSpace(uriBuilder.Path) ? "/ws/events" : uriBuilder.Path.TrimEnd('/');
@@ -168,42 +191,80 @@ public class EventBusClient : IEventBusClient
 
         uriBuilder.Path = path;
 
-        var escapedAccessToken = Uri.EscapeDataString(Options.AccessToken ?? string.Empty);
-        if (string.IsNullOrWhiteSpace(uriBuilder.Query))
-            uriBuilder.Query = $"accessToken={escapedAccessToken}";
-        else
-            uriBuilder.Query = uriBuilder.Query.TrimStart('?') + $"&accessToken={escapedAccessToken}";
+        if (!includeAccessToken)
+        {
+            var existingQuery = uriBuilder.Query.TrimStart('?');
+            var filtered = existingQuery
+                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Where(p => !p.StartsWith("accessToken=", StringComparison.OrdinalIgnoreCase))
+                .Where(p => !p.StartsWith("access_token=", StringComparison.OrdinalIgnoreCase));
+            uriBuilder.Query = filtered.Any() ? string.Join("&", filtered) : string.Empty;
+            return uriBuilder.Uri;
+        }
+
+        var existingQueryWithToken = uriBuilder.Query.TrimStart('?');
+        var alreadyHasToken = existingQueryWithToken
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Any(p => p.StartsWith("accessToken=", StringComparison.OrdinalIgnoreCase) || p.StartsWith("access_token=", StringComparison.OrdinalIgnoreCase));
+
+        if (!alreadyHasToken && !string.IsNullOrWhiteSpace(Options.AccessToken))
+        {
+            var escapedAccessToken = Uri.EscapeDataString(Options.AccessToken ?? string.Empty);
+            uriBuilder.Query = string.IsNullOrWhiteSpace(existingQueryWithToken)
+                ? $"accessToken={escapedAccessToken}"
+                : existingQueryWithToken + $"&accessToken={escapedAccessToken}";
+        }
 
         return uriBuilder.Uri;
     }
 
     private async Task CreateAndConnectWebSocket(CancellationToken cancellationToken)
     {
-        try
+        var attempts = new[]
         {
-            WSClient = new ClientWebSocket();
-            await WSClient.ConnectAsync(RequestURI, cancellationToken);
-        }
-        catch (OperationCanceledException oce)
+            (name: "tokenized", uri: RequestURI),
+            (name: "tokenless", uri: RequestURINoToken)
+        };
+
+        Exception? lastException = null;
+        foreach (var attempt in attempts)
         {
-            IsActive = false;
-            throw new ConnectionException("Connecting cancelled.", oce);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogTrace(ex, "Failed to connect to '{RequestURI}'", RequestURI);
-            Logger.LogError(ex, "Failed to connect to OpenHAB server at {ServerURI} with access token.", Options.WebSocket);
-            IsActive = false;
-            throw new ConnectionException("Connecting failed.", ex);
+            try
+            {
+                WSClient = new ClientWebSocket();
+                if (Options.AllowInsecureTls)
+                    WSClient.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+
+                Logger.LogTrace("Attempting OpenHAB websocket connect to {AttemptUri} ({AttemptName}).", attempt.uri, attempt.name);
+                await WSClient.ConnectAsync(attempt.uri, cancellationToken);
+
+                if (!IsWebSocketConnectedByState)
+                    continue;
+
+                if (attempt.name == "tokenized" && !string.IsNullOrWhiteSpace(Options.AccessToken)
+                    && !attempt.uri.Equals(RequestURINoToken))
+                {
+                    Logger.LogInformation("OpenHAB websocket connected successfully using tokenized URL at {AttemptUri}.", attempt.uri);
+                }
+
+                ApplyPersistentFiltersAfterConnect();
+                return;
+            }
+            catch (OperationCanceledException oce)
+            {
+                IsActive = false;
+                throw new ConnectionException("Connecting cancelled.", oce);
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+                Logger.LogWarning(ex, "Failed to connect to '{AttemptUri}' using websocket attempt '{AttemptName}'. Trying fallback only if available.", attempt.uri, attempt.name);
+            }
         }
 
-        if (!IsWebSocketConnectedByState)
-        {
-            IsActive = false;
-            throw new ConnectionException($"Failed to connect to OpenHAB at '{Options.WebSocket}' with access token.");
-        }
-
-        ApplyPersistentFiltersAfterConnect();
+        IsActive = false;
+        Logger.LogError(lastException, "Failed to connect to OpenHAB server at {ServerURI} with both tokenized and tokenless websocket attempts.", Options.WebSocket);
+        throw new ConnectionException("Connecting failed.", lastException ?? new InvalidOperationException("WebSocket connect failed without an exception."));
     }
 
     private void ApplyPersistentFiltersAfterConnect()
@@ -216,6 +277,13 @@ public class EventBusClient : IEventBusClient
                 string.Join(", ", DesiredTypeFilters.Select(t => t.ToString())));
             _ = SetTypeFilterAsync(DesiredTypeFilters);
         }
+        else
+        {
+            var defaultItemTypes = GetDefaultTypeFilters();
+            Logger.LogTrace("Applying default OpenHAB item-event type filter: {types}",
+                string.Join(", ", defaultItemTypes.Select(t => t.ToString())));
+            _ = SetTypeFilterAsync(defaultItemTypes);
+        }
 
         if (DesiredSourceFilters.Length > 0)
         {
@@ -225,24 +293,37 @@ public class EventBusClient : IEventBusClient
             return;
         }
 
-        // Backward-compatible default: optionally filter out own source when no explicit source filter was configured.
         if (Options.FilterSource)
         {
+            Logger.LogTrace("Applying default OpenHAB source filter to only receive events from source {source}.", Options.SourceEntity);
             _ = SetSourceFilterAsync(new[] { Options.SourceEntity });
+            return;
         }
+
+        Logger.LogDebug("OpenHAB source filtering is disabled; accepting all item events from the server.");
     }
 
     private void TriggerWebSocketRecreationAndReconnection()
     {
-        WebSocketReady.Reset();
-        WebSocketReconnectRequired.Set();
+        if (WebSocketReady.CurrentCount > 0)
+            WebSocketReady.Wait(0);
+        if (WebSocketReconnectRequired.CurrentCount == 0)
+            WebSocketReconnectRequired.Release();
     }
 
     private async Task WebSocketRecreator(CancellationToken cancellationToken)
     {
         while ( !cancellationToken.IsCancellationRequested )
         {
-            WebSocketReconnectRequired.Wait(cancellationToken);
+            try
+            {
+                await WebSocketReconnectRequired.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
             if (cancellationToken.IsCancellationRequested)
                 break;
 
@@ -270,8 +351,10 @@ public class EventBusClient : IEventBusClient
                     continue;
                 }
                 Logger.LogTrace("Reconnect successful.");
-                WebSocketReconnectRequired.Reset();
-                WebSocketReady.Set();
+                if (WebSocketReconnectRequired.CurrentCount > 0)
+                    WebSocketReconnectRequired.Wait(0);
+                if (WebSocketReady.CurrentCount == 0)
+                    WebSocketReady.Release();
             }
             catch ( Exception e2)
             {
@@ -305,8 +388,10 @@ public class EventBusClient : IEventBusClient
                         cur = ReceivingQueue.Take(cancellation);
                         if (cur != null && !cancellation.IsCancellationRequested)
                         {
+                            Logger.LogTrace("Notifier dequeued event: type={eventType}, topic={topic}", cur.Received.Type, cur.Received.Topic);
                             Logger.LogDebug("OpenHAB event received: {IEvent}", cur.Received.ToString());
                             EventReceived?.Invoke(this, cur);
+                            Logger.LogTrace("Notifier invoked subscribers for event type={eventType}, topic={topic}", cur.Received.Type, cur.Received.Topic);
                         }
                     }
                     catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -341,7 +426,7 @@ public class EventBusClient : IEventBusClient
             Logger.LogTrace("Starting receiving loop...");
             while ( !ReceivingQueue.IsCompleted && !cancellation.IsCancellationRequested )
             {
-                while ( !WebSocketReady.IsSet )
+                while ( WebSocketReady.CurrentCount == 0 )
                 {
                     await Task.Delay(100, cancellation);
                 }
@@ -355,7 +440,9 @@ public class EventBusClient : IEventBusClient
 
                 try
                 {
+                    Logger.LogTrace("ReceivingLoopAsync before ReceiveAsync: websocketState={webSocketState}, queueCompleted={queueCompleted}", WSClient?.State, ReceivingQueue.IsCompleted);
                     var evt = await ReceiveAsync(cancellation);
+                    Logger.LogTrace("ReceiveAsync returned event type={eventType}, clrType={clrType}", evt?.Type, evt?.GetType().Name ?? "<null>");
                     if (ReceivingQueue.IsCompleted || cancellation.IsCancellationRequested)
                         break;
                     if (evt == null)
@@ -363,6 +450,7 @@ public class EventBusClient : IEventBusClient
                     if (evt.Type == EventType.WebSocketEvent && evt is WebSocketEvent wse && wse.IsResponseFailed)
                         Logger.LogError("Failure response: {evt}", wse.ToString());
                     ReceivingQueue.Add(new EventReceivedEventArgs(evt, _timeProvider.GetUtcNow()));
+                    Logger.LogTrace("Queued event for notifier: type={eventType}, topic={topic}", evt.Type, evt.Topic);
                 }
                 catch ( InvalidOperationException )
                 {
@@ -410,7 +498,7 @@ public class EventBusClient : IEventBusClient
                 // check & wait until websocket ready
                 while (WSClient?.State != WebSocketState.Open && !token.IsCancellationRequested)
                 {
-                    while (!WebSocketReady.IsSet && !token.IsCancellationRequested)
+                    while (WebSocketReady.CurrentCount == 0 && !token.IsCancellationRequested)
                     {
                         // assume websocket is being connected, wait and try again.
                         await Task.Delay(1000, token);
@@ -456,13 +544,15 @@ public class EventBusClient : IEventBusClient
         WebSocketReceiveResult? res = null;
         do
         {
-            res = await WSClient.ReceiveAsync(Buffer, cts.Token);
+            Log.Clients.WaitingForNextWebSocketFrame(Logger, RequestURI, WSClient?.State);
+            res = await (WSClient?.ReceiveAsync(Buffer, cts.Token)
+                ?? throw new ConnectionException("No websocket object for receiving."));
+            Log.Clients.WebSocketFrameReceived(Logger, res.Count, res.EndOfMessage, res.MessageType, WSClient?.State);
             if (res.Count > 0)
                 await message.WriteAsync(Buffer.Array ?? throw new ConnectionException("Failed to get buffer array for receiving."), Buffer.Offset, res.Count, cts.Token);
         } while (!(res?.EndOfMessage ?? true || cancellationToken.IsCancellationRequested ));
 
-        if (cancellationToken.IsCancellationRequested)
-            throw new OperationCanceledException();
+        cancellationToken.ThrowIfCancellationRequested();
 
         return EventFactory.Create(message);
     }
@@ -522,8 +612,9 @@ public class EventBusClient : IEventBusClient
         sendEvent.ID = (++TransmitPacketCounter).ToString();
         sendEvent.Source = Options.SourceEntity;
         var serEvt = EventFactory.Serialize(sendEvent);
-        Logger.LogDebug("Transmitting {evtClass} event: {jsonEvent}", sendEvent.GetType().Name,
-            System.Text.Encoding.UTF8.GetString(serEvt.ToArray()));
+
+        Log.Clients.TransmittingEvent(Logger, sendEvent.GetType().Name, System.Text.Encoding.UTF8.GetString([.. serEvt]));
+
         await (WSClient?.SendAsync(
             serEvt,
             WebSocketMessageType.Text,
@@ -578,13 +669,13 @@ public class EventBusClient : IEventBusClient
                     {
                         AppliedSourceFilters = JsonSerializer.Deserialize<string[]>(evt.PayloadJson, EventFactory.JsonOptions)
                             ?? throw new ProtocolException("Failed to deserialize string[] of applied source filters.");
-                        Logger.LogInformation("Source filter applied: {filter}", string.Join(", ", AppliedSourceFilters));
+                        Logger.LogTrace("Source filter applied: {filter}", string.Join(", ", AppliedSourceFilters));
                     }
                     else if ( evt.IsFilterType )
                     {
                         AppliedTypeFilters = JsonSerializer.Deserialize<EventType[]>(evt.PayloadJson, EventFactory.JsonOptions)
                             ?? throw new ProtocolException("Failed to deserialize string[] of applied type filters.");
-                        Logger.LogInformation("Type filter applied: {filter}", string.Join(", ", AppliedTypeFilters.Select(t => t.ToString())));
+                        Logger.LogTrace("Type filter applied: {filter}", string.Join(", ", AppliedTypeFilters.Select(t => t.ToString())));
                     }
                 }
                 break;

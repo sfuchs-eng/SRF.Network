@@ -33,7 +33,11 @@ namespace SRF.Network.OpenHab.Client
         /// </summary>
         public string SourceEntity { get; set; } = nameof(SRF.Network.OpenHab.Client);
 
-        public bool FilterSource { get; set; } = true;
+        /// <summary>
+        /// When enabled, the client requests the server to filter events to the configured SourceEntity.
+        /// This is opt-in because defaulting it to true suppresses normal item updates from other sources.
+        /// </summary>
+        public bool FilterSource { get; set; } = false;
 
         public int ClientBufferSize { get; set; } = 1024;
 
@@ -41,5 +45,11 @@ namespace SRF.Network.OpenHab.Client
         /// Waiting time in ms after an unsuccessful WebSocket reconnection attempt until trying again.
         /// </summary>
         public int ReconnectWaitTime { get; set; } = 5000;
+
+        /// <summary>
+        /// Enables insecure TLS certificate validation for self-signed or otherwise untrusted certificates.
+        /// Use only for trusted private networks.
+        /// </summary>
+        public bool AllowInsecureTls { get; set; } = false;
     }
 }

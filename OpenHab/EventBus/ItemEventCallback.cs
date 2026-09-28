@@ -10,7 +10,7 @@ namespace SRF.Network.OpenHab.EventBus
         public EventType[] EventTypesAccepted { get; set; } = Array.Empty<EventType>();
         public EventHandler<EventReceivedEventArgs> EventHandler { get; set; }
 
-        private readonly EventType[] ItemStateEventOnly = { EventType.ItemStateEvent };
+        private readonly EventType[] ItemStateEventOnly = { EventType.ItemStateEvent, EventType.ItemStateUpdatedEvent };
         private readonly EventType[] ItemStateChangedEventOnly = { EventType.ItemStateChangedEvent };
 
         public ItemEventCallback(string itemName, EventHandler<EventReceivedEventArgs> itemEventHandler)

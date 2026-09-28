@@ -11,6 +11,12 @@ namespace SRF.Network.Cli;
 
 public class HostLauncher<TCommand>() where TCommand : BackgroundService
 {
+    public static string GetAppSettingsFilePath()
+    {
+        var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        return Path.GetFullPath(appSettingsPath);
+    }
+
     [CliOption(Alias = "j", Required = false, Arity = CliArgumentArity.ExactlyOne, Description = "Write JSON output to filename instead of console.")]
     public string? JsonOutputFileName { get; set; }
 
@@ -40,11 +46,24 @@ public class HostLauncher<TCommand>() where TCommand : BackgroundService
     {
         var userConfigPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var userConfigFile = "SRF.Network.json";
-        if (File.Exists(Path.Combine(userConfigPath, userConfigFile)))
-            Console.WriteLine($"Adding config from '{userConfigPath}/{userConfigFile}'");
+        var appSettingsFilePath = GetAppSettingsFilePath();
 
-        configurationBuilder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-        configurationBuilder.AddJsonFile(new PhysicalFileProvider(userConfigPath), userConfigFile, optional: false, reloadOnChange: true);
+        if (File.Exists(appSettingsFilePath))
+        {
+            Console.WriteLine($"Adding config from '{appSettingsFilePath}'");
+            configurationBuilder.AddJsonFile(appSettingsFilePath, optional: true, reloadOnChange: true);
+        }
+        else
+        {
+            Console.WriteLine($"No appsettings.json found at '{appSettingsFilePath}'.");
+        }
+
+        if (File.Exists(Path.Combine(userConfigPath, userConfigFile)))
+        {
+            Console.WriteLine($"Adding config from '{userConfigPath}/{userConfigFile}'");
+            configurationBuilder.AddJsonFile(new PhysicalFileProvider(userConfigPath), userConfigFile, optional: true, reloadOnChange: true);
+        }
+
         configurationBuilder.AddCommandLine([.. cliContext.Result.ParseResult.UnmatchedTokens]);
     }
 

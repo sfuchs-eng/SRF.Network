@@ -9,6 +9,7 @@ using SRF.Knx.Config.OpenHab;
 using SRF.Knx.Core;
 using SRF.Network.OpenHab;
 using SRF.Network.OpenHab.Client;
+using SRF.Network.OpenHab.EventBus.Events;
 
 namespace SRF.Network.Cli.Commands;
 
@@ -139,6 +140,9 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
             {
                 EventHandler<EventReceivedEventArgs> onEvent = (_, e) =>
                 {
+                    if (e.Received is not ItemEvent && e.Received is not ItemStateUpdatedEvent)
+                        return;
+
                     var type = e.Received.Type;
                     var source = e.Received.Source ?? "<none>";
                     Console.WriteLine($"[{e.When:O}] {type}: topic={e.Received.Topic}, source={source}, payload={e.Received.PayloadJson.Clamp(200, true)}");

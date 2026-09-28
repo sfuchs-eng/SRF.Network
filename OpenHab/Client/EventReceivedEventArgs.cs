@@ -19,11 +19,13 @@ namespace SRF.Network.OpenHab.Client
         {
             if (!(Received.Type == EventType.ItemAddedEvent
                 || Received.Type == EventType.ItemStateEvent
+                || Received.Type == EventType.ItemStateUpdatedEvent
                 || Received.Type == EventType.ItemCommandEvent
                 || Received.Type == EventType.ItemRemovedEvent
                 || Received.Type == EventType.ItemUpdatedEvent
                 || Received.Type == EventType.ItemStateChangedEvent
                 || Received.Type == EventType.ItemStatePredictedEvent
+                || Received.Type == EventType.GroupStateUpdatedEvent
                 || Received.Type == EventType.GroupItemStateChangedEvent
                 ))
                 return false;

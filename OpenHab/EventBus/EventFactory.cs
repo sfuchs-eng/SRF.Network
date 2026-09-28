@@ -51,36 +51,59 @@ namespace SRF.Network.OpenHab.EventBus
 
         public Type DefaultEventType { get; set; } = typeof(UnmappedEvent);
 
-        protected Dictionary<EventType,Type> BuildEventTypeMap()
+        protected Dictionary<EventType, Type> BuildEventTypeMap()
         {
             // List of types by EventType enum value.
-            var etCand = AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(a => a.GetTypes())
-                .Where(t => typeof(IEvent).IsAssignableFrom(t))
-                .Select(t => new { EvtType = t, MapMeta1 = t.GetCustomAttribute<EventTypesMappedAttribute>() })
-                .Where(tm => tm.EvtType != null && tm.MapMeta1 != null)
-                .SelectMany(tm => tm.MapMeta1!
-                    .CompatibleWith.Select(id => new { EType = tm.EvtType, MapMeta = tm.MapMeta1, ID = id })
-                )
-                .GroupBy(etTripple => etTripple.ID)
-                .ToArray(); // complete list of all candiate Classes with mapped EventType IDs
+            // Some test/runtime hosts load assemblies that cannot fully resolve all types (for example WebAssembly JS interop).
+            // Ignore unloadable types instead of crashing the entire event mapping discovery.
+            var candidateTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(static assembly =>
+                {
+                    try
+                    {
+                        return assembly.GetTypes();
+                    }
+                    catch (ReflectionTypeLoadException ex)
+                    {
+                        return ex.Types.Where(static type => type is not null)!;
+                    }
+                })
+                .Where(static type => type is not null && typeof(IEvent).IsAssignableFrom(type))
+                .Select(static type => type!);
 
-            var et = etCand.Select(idTripplesGroup => idTripplesGroup
-                    .OrderBy(p => p.MapMeta.Priority)
-                    .FirstOrDefault()) // select prioritized Type per EventType
-                .Where(k => k != null)
-                .ToDictionary(k => k!.ID, v => v!.EType);
+            var eventTypeCandidates = candidateTypes
+                .Select(type =>
+                {
+                    var mapAttribute = type.GetCustomAttribute<EventTypesMappedAttribute>();
+                    return mapAttribute is null
+                        ? null
+                        : new { EType = type, MapMeta = mapAttribute };
+                })
+                .Where(static match => match is not null)
+                .SelectMany(match =>
+                {
+                    var mappedType = match!.EType;
+                    var mapAttribute = match.MapMeta;
+                    return mapAttribute.CompatibleWith.Select(id => new { EType = mappedType, MapMeta = mapAttribute, ID = id });
+                })
+                .GroupBy(entry => entry.ID)
+                .ToArray(); // complete list of all candidate classes with mapped EventType IDs
 
-            Logger.LogDebug("Mapped event types: [{mapList}]", string.Join(", ", et.Select(p => $"{{ {p.Key}: {p.Value.FullName} }}")));
-            var mappedCnt = et.Count;
+            var mappedEventTypes = eventTypeCandidates
+                .Select(group => group.OrderBy(entry => entry.MapMeta.Priority).FirstOrDefault())
+                .Where(entry => entry is not null)
+                .ToDictionary(entry => entry!.ID, entry => entry!.EType);
+
+            Logger.LogDebug("Mapped event types: [{mapList}]", string.Join(", ", mappedEventTypes.Select(p => $"{{ {p.Key}: {p.Value.FullName} }}")));
+            var mappedCnt = mappedEventTypes.Count;
             var expectedCnt = Enum.GetValues(typeof(EventType)).Length;
             if (mappedCnt != expectedCnt)
             {
-                var missing = ((EventType[])Enum.GetValues(typeof(EventType))).Where(t => !et.ContainsKey(t));
+                var missing = ((EventType[])Enum.GetValues(typeof(EventType))).Where(t => !mappedEventTypes.ContainsKey(t));
                 Logger.LogWarning("Only {mappedCnt} EventTypes mapped out of {enlistedCnt} available types. Miss mapping to an IEvent class: {missingList}",
                     mappedCnt, expectedCnt, string.Join(", ", missing));
             }
-            return et;
+            return mappedEventTypes;
         }
 
         private Type GetEventType(EventType typeID)

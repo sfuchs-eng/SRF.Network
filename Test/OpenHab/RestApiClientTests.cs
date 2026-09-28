@@ -122,10 +122,9 @@ public class RestApiClientTests
 
     private static RestApiClient CreateClient(TestHttpMessageHandler handler)
     {
-        var factory = Substitute.For<IHttpClientFactory>();
-        factory.CreateClient().Returns(new HttpClient(handler));
+        var client = new HttpClient(handler);
         return new RestApiClient(
-            factory,
+            client,
             Options.Create(CreateOptions()),
             NullLogger<RestApiClient>.Instance);
     }

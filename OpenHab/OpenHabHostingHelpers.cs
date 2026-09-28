@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using SRF.Network.OpenHab.Client;
 
 namespace SRF.Network.OpenHab
@@ -26,9 +27,25 @@ namespace SRF.Network.OpenHab
         {
             services.AddOptions();
             services.AddOptions<EventBusClientOptions>().BindConfiguration(configSectionName);
+            services.AddHttpClient<IRestApiClient, RestApiClient>((sp, client) =>
+            {
+                var opts = sp.GetRequiredService<IOptions<EventBusClientOptions>>().Value;
+                client.BaseAddress = opts.RestApi;
+                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", opts.AccessToken);
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+            {
+                var opts = sp.GetRequiredService<IOptions<EventBusClientOptions>>().Value;
+                if (!opts.AllowInsecureTls)
+                    return new HttpClientHandler();
+
+                return new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                };
+            });
             services.AddHttpClient();
             services.AddSingleton<IEventFactory, EventBus.EventFactory>();
-            services.AddSingleton<IRestApiClient, RestApiClient>();
             services.AddSingleton<IEventBusClient, EventBusClient>();
             services.AddHostedService<OpenHabConnector>();
             return services;

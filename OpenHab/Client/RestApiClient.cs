@@ -11,7 +11,6 @@ namespace SRF.Network.OpenHab.Client
     public class RestApiClient : IRestApiClient
     {
         static readonly string ApiItems = "items?recursive=false";
-        private readonly IHttpClientFactory httpClientFactory;
 
         HttpClient RestClient { get; }
         ILogger<RestApiClient> Logger { get; }
@@ -27,13 +26,14 @@ namespace SRF.Network.OpenHab.Client
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, /* we may need the \" style encoding */
         };
 
-        public RestApiClient(IHttpClientFactory httpClientFactory, IOptions<EventBusClientOptions> options, ILogger<RestApiClient> logger)
+        public RestApiClient(HttpClient httpClient, IOptions<EventBusClientOptions> options, ILogger<RestApiClient> logger)
         {
-            this.httpClientFactory = httpClientFactory;
             Logger = logger;
-            RestClient = httpClientFactory.CreateClient();
-            RestClient.BaseAddress = options.Value.RestApi;
-            RestClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.Value.AccessToken);
+            var config = options.Value;
+
+            RestClient = httpClient;
+            RestClient.BaseAddress = config.RestApi;
+            RestClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", config.AccessToken);
         }
 
         public async Task<Item[]> GetItemsAsync(CancellationToken cancel)
