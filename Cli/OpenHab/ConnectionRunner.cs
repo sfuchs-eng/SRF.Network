@@ -11,11 +11,17 @@ using SRF.Network.OpenHab.EventBus.Events;
 
 namespace SRF.Network.Cli.OpenHab;
 
+/// <summary>
+/// Early trials. See <see cref="SRF.Network.OpenHab.OpenHabConnector"/> which provides a more complete implementation of an OpenHAB connection runner.
+/// </summary>
 public interface IConnectionRunner : IHostedService
 {
     IEventBusClient GetOpenHabClient();
 }
 
+/// <summary>
+/// Early trials. See <see cref="SRF.Network.OpenHab.OpenHabConnector"/> which provides a more complete implementation of an OpenHAB connection runner.
+/// </summary>
 public sealed class ConnectionRunner : IConnectionRunner
 {
     public ConnectionRunner(IEventBusClient ohclient, IRestApiClient restApi, IEventFactory eventFactory, ILogger<ConnectionRunner> logger)
@@ -56,12 +62,12 @@ public sealed class ConnectionRunner : IConnectionRunner
 
             _ = Task.Run(() => SturdyNumberCounter(cancellationToken), cancellationToken);
         }
-        catch ( OperationCanceledException ex)
+        catch (OperationCanceledException ex)
         {
             Logger.LogInformation("Connection got canceled.");
             throw new OperationCanceledException("OpenHAB connection runner start got canceled.", ex, cancellationToken);
         }
-        catch ( Exception ex )
+        catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to connect to OpenHAB");
             Environment.Exit(1);
@@ -77,7 +83,7 @@ public sealed class ConnectionRunner : IConnectionRunner
     private async Task SturdyNumberCounter(CancellationToken cancel)
     {
         long count = 0;
-        while ( !cancel.IsCancellationRequested )
+        while (!cancel.IsCancellationRequested)
         {
             count++;
             await OHClient.SendAsync(EventFactory.Create<ItemEventTypeValue>(EventType.ItemCommandEvent).Set(count).ForItem("WeirdTestItemCounter"), cancel);
@@ -112,7 +118,7 @@ public sealed class ConnectionRunner : IConnectionRunner
         }
         else
             Logger.LogInformation("Received OpenHAB event {evtType}: {IEvent}", e.Received.GetType().Name, e.Received.ToString());
-            */               
+            */
 
         if (e.IsItem("TestSwitch"))
         {

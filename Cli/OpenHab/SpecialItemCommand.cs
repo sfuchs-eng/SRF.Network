@@ -3,6 +3,9 @@ using SRF.Network.OpenHab.EventBus;
 
 namespace SRF.Network.Cli.OpenHab;
 
+/// <summary>
+/// To support early trials. See <see cref="SRF.Network.OpenHab.IRestApiClient"/> and <see cref="SRF.Network.OpenHab.IEventBusClient"/>.
+/// </summary>
 public class SpecialItemCommand
 {
     [JsonPropertyName("type")]

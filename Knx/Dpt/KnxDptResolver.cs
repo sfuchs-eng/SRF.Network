@@ -13,7 +13,7 @@ namespace SRF.Network.Knx.Dpt;
 /// </summary>
 /// <remarks>
 /// The resolver is used by the KNX connectivity provider in the `SRF.Knx` package to resolve the DPT for a group address when processing incoming or outgoing group address events.
-/// It's the lightweight alternative to the more complex <see cref="IKnxSystemConfiguration"/> for resolving DPTs for group addresses, without the need to inject the entire system configuration into performance-sensitive code paths (e.g. processing incoming group address events).
+/// It's the lightweight alternative to the more complex <see cref="IKnxSystemConfigurationResolver"/> for resolving DPTs for group addresses, without the need to inject the entire system configuration into performance-sensitive code paths (e.g. processing incoming group address events).
 /// </remarks>
 public class KnxDptResolver : IDptResolver
 {
