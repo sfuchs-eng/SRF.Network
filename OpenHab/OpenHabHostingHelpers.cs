@@ -47,7 +47,13 @@ namespace SRF.Network.OpenHab
             services.AddHttpClient();
             services.AddSingleton<IEventFactory, EventBus.EventFactory>();
             services.AddSingleton<IEventBusClient, EventBusClient>();
-            services.AddHostedService<OpenHabConnector>();
+
+            // only add OpenHabConnector is EventBusClientOptions.EnableWebSocket is true (default)
+            var eventBusClientOptions = services.BuildServiceProvider().GetRequiredService<IOptions<EventBusClientOptions>>().Value;
+            if ( eventBusClientOptions?.EnableWebSocket ?? true )
+            {
+                services.AddHostedService<OpenHabConnector>();
+            }
             return services;
         }
     }
