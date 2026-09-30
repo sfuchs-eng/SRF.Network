@@ -22,7 +22,7 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
     [CliOption(Alias = "l", Description = "Connect to OpenHAB and log all events to the console.")]
     public bool LogEvents { get; set; } = false;
 
-    [CliOption(Alias = "hc", Description = "Update HomeCompanion configuration from OpenHAB items.")]
+    [CliOption(Alias = "hc", Description = "Update HomeCompanion configuration from OpenHAB items -- NOT IMPL here, moved to HomeCompanion.Cli = hccli")]
     public bool UpdateHomeCompanionConfiguration { get; set; } = false;
 
     protected override void AddServices(IServiceCollection services, CliContext cliContext)
@@ -56,65 +56,6 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
             applicationLifetime.StopApplication();
         }
 
-        protected async Task GenerateOpenHabValuesCodeAsync(CancellationToken stoppingToken)
-        {
-            // get KNX configuration from the service provider and config files, not from OpenHAB (would be better, might be something for the future)
-            var knxConfig = serviceProvider.GetRequiredService<IKnxConfigFactory>().GetDomainConfig();
-            var openHabKnxConfig = serviceProvider.GetRequiredService<IOpenHabKnxConfigFactory>()
-                .Get(knxConfig);
-            var openHabKnxItemsNames = openHabKnxConfig.Things
-                .SelectMany(t => t.GroupAddresses)
-                .Select(c => c.Item?.Name ?? c.Name)
-                .Distinct()
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // get all OpenHAB items from the OpenHAB REST API
-            var allItems = await openhabRestApiClient.GetItemsAsync(stoppingToken);
-
-            // items from OpenHAB that are not mapped to KNX group addresses
-            var nonKnxItems = allItems
-                .Where(i => !openHabKnxItemsNames.Contains(i.Name))
-                .Select(i => new OpenHabItemInfo { Name = i.Name, Type = i.Type, State = i.State })
-                .ToList();
-
-            // get config
-            var config = serviceProvider.GetRequiredService<IOptions<KnxSystemConfigOptions>>().Value;
-            if (config is null)
-            {
-                LogErrorAndTerminate("KNX system configuration is not available. Please check your configuration.");
-                return;
-            }
-
-            var filePath = config.HomeCompanion.OpenHabValuesCodeGenFilePath;
-            if (string.IsNullOrWhiteSpace(filePath))
-            {
-                LogErrorAndTerminate("OpenHAB values code generation file path is not specified in the KNX system configuration. Please check your configuration.");
-                return;
-            }
-
-            var nameSpace = config.HomeCompanion.GeneratedValuesClassesNamespace;
-            if (string.IsNullOrWhiteSpace(nameSpace))
-            {
-                LogErrorAndTerminate("OpenHAB values code generation namespace is not specified in the KNX system configuration. Please check your configuration.");
-                return;
-            }
-
-            var className = config.HomeCompanion.OpenHabValuesClassName;
-            if (string.IsNullOrWhiteSpace(className))
-            {
-                LogErrorAndTerminate("OpenHAB values code generation class name is not specified in the KNX system configuration. Please check your configuration.");
-                return;
-            }
-
-            var codeGen = new OpenHabValuesCodeGenerator(serviceProvider.GetRequiredService<ILogger<OpenHabValuesCodeGenerator>>());
-            var code = codeGen.Generate(nonKnxItems, className, nameSpace);
-
-            File.WriteAllText(filePath, code, System.Text.Encoding.UTF8);
-            logger.LogInformation("Generated OpenHabValues source with {count} IValues for OpenHAB items and wrote to '{file}'",
-                nonKnxItems.Count,
-                filePath);
-        }
-
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             if (cmd.ListItems)
@@ -131,7 +72,7 @@ public class OpenHab : HostLauncher<OpenHab.Worker>
 
             if (cmd.UpdateHomeCompanionConfiguration)
             {
-                await GenerateOpenHabValuesCodeAsync(stoppingToken);
+                logger.LogError("Function got moved to HomeCompanion.Cli, see `hccli ohvcg`");
                 applicationLifetime.StopApplication();
                 return;
             }
